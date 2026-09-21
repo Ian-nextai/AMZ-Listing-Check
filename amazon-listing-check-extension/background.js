@@ -1377,6 +1377,15 @@ function collectMissingFieldNotes(selectedChecks, extractedChecks) {
   if (selectedChecks.criticalReviews && !extractedChecks.criticalReviews?.length) {
     notes.push("无差评可收集");
   }
+  if (selectedChecks.stockStatus && !extractedChecks.stockStatus) {
+    notes.push("无库存信息");
+  }
+  if (selectedChecks.deliveryPromise && !extractedChecks.deliveryPromise) {
+    notes.push("无配送时效");
+  }
+  if (selectedChecks.fulfilmentRoute && !extractedChecks.fulfilmentRoute) {
+    notes.push("无配送方式");
+  }
   if (selectedChecks.addToCart && extractedChecks.hasAddToCart === false) {
     notes.push("无购物车按钮");
   }

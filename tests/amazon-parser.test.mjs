@@ -405,7 +405,10 @@ test("extractAmazonListingChecks returns only the selected checks", () => {
       imageDetailUrl: "https://m.media-amazon.com/images/S/aplus-media-library-service-media/037f78de.__CR0,0,1464,600_PT0_SX1464_V1___.jpg",
       hasAddToCart: null,
       sellerName: null,
-      criticalReviews: null
+      criticalReviews: null,
+      stockStatus: null,
+      deliveryPromise: null,
+      fulfilmentRoute: null
     }
   );
 });
@@ -428,7 +431,10 @@ test("extractAmazonListingChecks still serves the legacy checks", () => {
       imageDetailUrl: null,
       hasAddToCart: true,
       sellerName: "U.S. Based seller",
-      criticalReviews: null
+      criticalReviews: null,
+      stockStatus: null,
+      deliveryPromise: null,
+      fulfilmentRoute: null
     }
   );
 });

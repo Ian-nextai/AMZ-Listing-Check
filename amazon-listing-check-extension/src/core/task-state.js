@@ -8,7 +8,10 @@ export const CHECK_KEYS = [
   "category",
   "addToCart",
   "seller",
-  "criticalReviews"
+  "criticalReviews",
+  "stockStatus",
+  "deliveryPromise",
+  "fulfilmentRoute"
 ];
 
 export function createTask(asins, selectedChecks) {
@@ -57,7 +60,10 @@ export function recordTaskSuccess(task, asin, extractedChecks) {
     sellerName: extractedChecks?.sellerName || "",
     criticalReviews: Array.isArray(extractedChecks?.criticalReviews) ? extractedChecks.criticalReviews : [],
     reviewPageUrl: extractedChecks?.reviewPageUrl || "",
-    reviewsError: extractedChecks?.reviewsError || ""
+    reviewsError: extractedChecks?.reviewsError || "",
+    stockStatus: extractedChecks?.stockStatus || "",
+    deliveryPromise: extractedChecks?.deliveryPromise || "",
+    fulfilmentRoute: extractedChecks?.fulfilmentRoute || ""
   });
 }
 
@@ -82,7 +88,10 @@ export function recordTaskFailure(task, asin, error) {
     sellerName: "",
     criticalReviews: [],
     reviewPageUrl: "",
-    reviewsError: ""
+    reviewsError: "",
+    stockStatus: "",
+    deliveryPromise: "",
+    fulfilmentRoute: ""
   });
 }
 

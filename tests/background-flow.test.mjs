@@ -83,7 +83,10 @@ test("normalizeSelectedChecks keeps only known check keys as booleans", () => {
     category: false,
     addToCart: false,
     seller: false,
-    criticalReviews: false
+    criticalReviews: false,
+    stockStatus: false,
+    deliveryPromise: false,
+    fulfilmentRoute: false
   });
 });
 
