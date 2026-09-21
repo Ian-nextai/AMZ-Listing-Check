@@ -421,29 +421,81 @@ export function extractStockStatus(html) {
   return isScriptSource(text) ? "" : text;
 }
 
+// Amazon renders two delivery promises side by side: what a normal buyer waits
+// (the "primary" slot) and what Prime shortens it to (the "secondary" slot).
+// Buyers comparing suppliers care about both, so both are reported.
 export function extractDeliveryPromise(html) {
-  const text = String(html || "");
-  const section = readSection(text, "mir-layout-DELIVERY_BLOCK") || readSection(text, "deliveryBlockMessage");
+  const section = readSection(html, "mir-layout-DELIVERY_BLOCK");
   if (!section) {
     return "";
   }
 
-  const cleaned = normalizeText(stripTags(decodeHtml(stripNonTextNodes(section))));
-  return isScriptSource(cleaned) ? "" : cleaned;
+  const standard = readDeliveryTime(section, "PRIMARY_DELIVERY_MESSAGE_LARGE");
+  const prime = readDeliveryTime(section, "SECONDARY_DELIVERY_MESSAGE_LARGE");
+
+  const lines = [];
+  if (standard) {
+    lines.push(`普通用户: ${standard}`);
+  }
+  if (prime) {
+    lines.push(`Prime: ${prime}`);
+  }
+
+  return lines.join("\n");
 }
 
-// Ships-from and sold-by share the offer-display feature markup already used by
-// extractSellerName. Either half can be missing, so the route is assembled from
-// whatever is present rather than printing a placeholder.
-export function extractFulfilmentRoute(html) {
-  const text = String(html || "");
-  const shipsFrom = readOfferFeature(text, "desktop-fulfiller-info");
-  const soldBy = readOfferFeature(text, "desktop-merchant-info");
+// Prefers the structured delivery-time attribute; falls back to the visible
+// wording so a layout change does not silently blank the column. Returns "" when
+// the slot is absent, so a missing Prime line is never filled from the standard
+// one.
+function readDeliveryTime(section, slotName) {
+  const slot = readSlot(section, slotName);
+  if (!slot) {
+    return "";
+  }
 
-  return [
-    shipsFrom ? `Ships from ${shipsFrom}` : "",
-    soldBy ? `Sold by ${soldBy}` : ""
-  ].filter(Boolean).join(" / ");
+  const attributeMatch = slot.match(/data-csa-c-delivery-time="([^"]*)"/i);
+  if (attributeMatch?.[1]) {
+    const value = normalizeText(decodeHtml(attributeMatch[1]));
+    if (value && !isScriptSource(value)) {
+      return value;
+    }
+  }
+
+  const text = normalizeText(stripTags(decodeHtml(stripNonTextNodes(slot))));
+  if (!text || isScriptSource(text)) {
+    return "";
+  }
+
+  const deliveryMatch = text.match(/(?:FREE\s+)?delivery\s+([^.]{3,60}?)(?:\.|Order within|$)/i);
+  return normalizeText(deliveryMatch?.[1] || "");
+}
+
+// Reads one delivery slot up to the next slot (or the end of the block), so a
+// missing slot yields nothing rather than inheriting its sibling's content.
+function readSlot(section, slotName) {
+  const openPattern = new RegExp(`<div[^>]*id="[^"]*${slotName}"[^>]*>`, "i");
+  const openMatch = openPattern.exec(section);
+  if (!openMatch) {
+    return "";
+  }
+
+  const start = openMatch.index + openMatch[0].length;
+  const rest = section.slice(start);
+
+  const nextSlot = rest.search(/<div[^>]*id="[^"]*_DELIVERY_MESSAGE_LARGE"/i);
+  const body = nextSlot >= 0 ? rest.slice(0, nextSlot) : rest;
+
+  // Keep to this slot's own subtree; the block can hold unrelated siblings.
+  return sliceBalancedDivs(body, 0);
+}
+
+// Reports who ships the item exactly as the page states it — "Amazon" or the
+// merchant's own name. The seller already has its own column, so this is the
+// ships-from half only.
+export function extractFulfilmentRoute(html) {
+  const shipsFrom = readOfferFeature(String(html || ""), "desktop-fulfiller-info");
+  return shipsFrom ? `Ships from ${shipsFrom}` : "";
 }
 
 function readOfferFeature(text, featureName) {

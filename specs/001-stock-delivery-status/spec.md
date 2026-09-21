@@ -20,7 +20,7 @@ Live probing of two listings established which signals are actually available:
 | --- | --- | --- |
 | Stock text | `In Stock` in `#availability` | no availability node |
 | Delivery promise | `FREE delivery Saturday, September 26` | absent |
-| Ships from / Sold by | present in Buy Box | absent |
+| Ships from | present in Buy Box | absent |
 
 So each signal is independently absent on real listings, which drives the requirement that
 they are collected and exported independently.
@@ -52,8 +52,9 @@ ticked, and confirm the exported column distinguishes them.
 
 ### User Story 2 - See the delivery promise (Priority: P2)
 
-A seller ticks **配送时效** to learn the promised delivery window for each ASIN, so they
-can compare fulfilment speed across suppliers.
+A seller ticks **配送时效** to learn both delivery windows for each ASIN — what a normal
+buyer waits and what Prime shortens it to — so they can compare fulfilment speed across
+suppliers and judge whether the listing is worth a Prime-eligible buy.
 
 **Why this priority**: Valuable for sourcing decisions, but secondary to stock level and
 derived from the same page regions.
@@ -63,8 +64,8 @@ promise text; run an unavailable ASIN and confirm the cell is blank without fail
 
 **Acceptance Scenarios**:
 
-1. **Given** a listing with a delivery promise, **When** the run completes, **Then** the
-   delivery cell contains that promise text with internal whitespace collapsed.
+1. **Given** a listing with both delivery times, **When** the run completes, **Then** the
+   cell shows the standard and Prime times on separate lines, each labelled.
 2. **Given** a listing whose delivery block is dynamic or absent, **When** the run
    completes, **Then** the delivery cell is blank and the row still succeeds.
 
@@ -72,8 +73,8 @@ promise text; run an unavailable ASIN and confirm the cell is blank without fail
 
 ### User Story 3 - See the fulfilment route (Priority: P3)
 
-A seller ticks **配送方式** to distinguish Amazon-fulfilled listings from third-party
-merchant-fulfilled ones.
+A seller ticks **配送方式** to see, in the page's own words, whether Amazon ships the item
+or the merchant does.
 
 **Why this priority**: Useful context, but it partially overlaps the existing `Seller`
 column, so it is the least urgent of the three.
@@ -85,7 +86,7 @@ succeeds.
 **Acceptance Scenarios**:
 
 1. **Given** a listing with Buy Box fulfilment info, **When** the run completes, **Then**
-   the shipping cell identifies who ships and who sells.
+   the cell reads `Ships from Amazon` or `Ships from <merchant>`, matching the page.
 2. **Given** a listing with no fulfilment info, **When** the run completes, **Then** the
    cell is blank and the row still succeeds.
 
@@ -116,13 +117,16 @@ succeeds.
 - **FR-004**: The system MUST extract stock status text from the availability region of
   the listing page.
 - **FR-005**: The system MUST NOT treat embedded script source as stock text.
-- **FR-006**: The system MUST extract the delivery promise text when present.
-- **FR-007**: The system MUST extract who ships and who sells the item when present.
-- **FR-008**: A missing value for any of these three fields MUST leave the cell blank, log
+- **FR-006**: The system MUST extract both delivery times when present — the standard
+  buyer's and the Prime member's — labelled so they are distinguishable within the cell.
+- **FR-007**: The system MUST report the shipment origin verbatim as the page states it
+  (`Ships from Amazon`, or `Ships from <merchant name>`), without inventing a value when
+  the page states none.
+- **FR-009**: A missing value for any of these three fields MUST leave the cell blank, log
   a note, and NOT fail the ASIN row.
-- **FR-009**: Extraction MUST remain in `src/core/` as a pure function taking HTML and
+- **FR-010**: Extraction MUST remain in `src/core/` as a pure function taking HTML and
   returning fields, with no `chrome.*` usage.
-- **FR-010**: Collapsed whitespace and HTML entities in extracted text MUST be normalised
+- **FR-011**: Collapsed whitespace and HTML entities in extracted text MUST be normalised
   the same way existing fields are.
 
 ### Key Entities
