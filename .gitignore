@@ -1,0 +1,15 @@
+# Build artifacts
+*.zip
+
+# Local scratch
+node_modules/
+*.log
+
+# Third-party reference extension kept locally only
+参考文件/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

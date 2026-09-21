@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon Listing Check Runner</title>
+  <style>
+    :root {
+      --bg: #eef4f0;
+      --panel: rgba(255, 255, 255, 0.96);
+      --line: #d8e2da;
+      --text: #1f3128;
+      --muted: #607264;
+      --primary: #1f6b52;
+      --primary-strong: #154b39;
+      --success: #1f8b4c;
+      --warning: #d4840d;
+      --danger: #c53b2c;
+      --shadow: 0 18px 34px rgba(31, 49, 40, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+      color: var(--text);
+      font: 14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(31, 107, 82, 0.14), transparent 36%),
+        linear-gradient(180deg, #fafcf8 0%, var(--bg) 100%);
+    }
+    .shell { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.84);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: 26px; }
+    h2 { font-size: 16px; }
+    .hero, .top-row, .button-row { display: flex; gap: 14px; align-items: center; justify-content: space-between; }
+    .hero p { margin-top: 8px; color: var(--muted); max-width: 760px; }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-weight: 800;
+      background: rgba(96, 114, 100, 0.16);
+      color: var(--muted);
+    }
+    .status-pill.running { background: rgba(31, 139, 76, 0.15); color: var(--success); }
+    .status-pill.paused { background: rgba(212, 132, 13, 0.15); color: #8f5800; }
+    .status-pill.completed { background: rgba(31, 139, 76, 0.15); color: var(--success); }
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .metric {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fbfdfb;
+    }
+    .metric-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+    .metric-value {
+      margin-top: 6px;
+      font-size: 20px;
+      font-weight: 800;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .progress-box {
+      margin-top: 16px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #f8fbf9, #edf5f0);
+    }
+    .progress-track {
+      height: 10px;
+      margin-top: 14px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(96, 114, 100, 0.14);
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(135deg, var(--primary), #5fa487);
+      transition: width 0.25s ease;
+    }
+    .button-row { justify-content: flex-start; flex-wrap: wrap; margin-top: 14px; }
+    button {
+      min-height: 42px;
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 12px;
+      color: #fff;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .button-muted { color: var(--text); background: linear-gradient(135deg, #eef3ea, #dbe4d1); }
+    .button-warning { color: #5a3d00; background: linear-gradient(135deg, #ffd78e, var(--warning)); }
+    .button-success { background: linear-gradient(135deg, #21a158, var(--success)); }
+    .button-danger { background: linear-gradient(135deg, #ea5c4b, var(--danger)); }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .log {
+      max-height: 420px;
+      overflow-y: auto;
+      margin-top: 14px;
+      padding-right: 4px;
+    }
+    .log-entry {
+      margin: 0 0 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #f6f9f7;
+      border: 1px solid #dde7df;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log-entry.log-error {
+      color: var(--danger);
+      background: #fff2f1;
+      border-color: rgba(197, 59, 44, 0.2);
+      font-weight: 700;
+    }
+    @media (max-width: 960px) {
+      .hero, .top-row { flex-direction: column; align-items: flex-start; }
+      .overview-grid, .meta-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      body { padding: 16px; }
+      .overview-grid, .meta-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <div class="hero">
+        <div>
+          <h1>Amazon Listing Check Runner</h1>
+          <p>监控后台任务进度，并通过周期性心跳帮助唤醒扩展后台。关闭 Popup 后，这个页面仍然可以持续观察任务。</p>
+        </div>
+        <div id="status-pill" class="status-pill">待命</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="top-row">
+        <h2>实时状态</h2>
+        <div id="heartbeat-text" style="color: var(--muted);">Runner 心跳待启动</div>
+      </div>
+
+      <div class="overview-grid">
+        <div class="metric">
+          <div class="metric-label">当前 ASIN</div>
+          <div id="current-asin" class="metric-value">-</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">总进度</div>
+          <div id="progress-summary" class="metric-value">0 / 0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">成功</div>
+          <div id="success-count" class="metric-value">0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">失败</div>
+          <div id="failed-count" class="metric-value">0</div>
+        </div>
+      </div>
+
+      <div class="progress-box">
+        <div id="progress-text">等待任务开始。</div>
+        <div class="progress-track">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+      </div>
+
+      <div class="meta-grid">
+        <div class="metric">
+          <div class="metric-label">配送邮编</div>
+          <div id="zip-code" class="metric-value">-</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">导出文件</div>
+          <div id="download-file" class="metric-value">-</div>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button id="refresh-btn" class="button-muted" type="button">刷新状态</button>
+        <button id="focus-worker-btn" class="button-muted" type="button">打开工作标签页</button>
+        <button id="pause-btn" class="button-warning" type="button">暂停任务</button>
+        <button id="resume-btn" class="button-success" type="button">继续任务</button>
+        <button id="save-btn" class="button-muted" type="button">导出当前结果</button>
+        <button id="discard-btn" class="button-danger" type="button">放弃任务</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>任务日志</h2>
+      <div id="log" class="log"></div>
+    </section>
+  </main>
+
+  <script type="module" src="runner.js"></script>
+</body>
+</html>

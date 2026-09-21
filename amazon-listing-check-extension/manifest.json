@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Amazon Listing Check Helper",
+  "version": "2.1.1",
+  "description": "Batch-check Amazon.com listings by ASIN: title, highlight, ratings, bullet points, images and critical reviews, exported to XLSX.",
+  "icons": {
+    "16": "icon16.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icon16.png"
+    },
+    "default_title": "Amazon Listing Check Helper",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "downloads",
+    "storage",
+    "tabs",
+    "scripting",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://www.amazon.com/*",
+    "https://m.media-amazon.com/*",
+    "https://images-na.ssl-images-amazon.com/*",
+    "https://images.amazon.com/*"
+  ]
+}
