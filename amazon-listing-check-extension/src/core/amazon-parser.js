@@ -341,7 +341,10 @@ export function extractAmazonListingChecks(html, selectedChecks) {
     imageDetailUrl: selectedChecks?.imageDetail ? detailImages[0] || "" : null,
     hasAddToCart: selectedChecks?.addToCart ? hasAddToCartButton(html) : null,
     sellerName: selectedChecks?.seller ? extractSellerName(html) : null,
-    criticalReviews: selectedChecks?.criticalReviews ? extractCriticalReviews(html) : null
+    criticalReviews: selectedChecks?.criticalReviews ? extractCriticalReviews(html) : null,
+    stockStatus: selectedChecks?.stockStatus ? extractStockStatus(html) : null,
+    deliveryPromise: selectedChecks?.deliveryPromise ? extractDeliveryPromise(html) : null,
+    fulfilmentRoute: selectedChecks?.fulfilmentRoute ? extractFulfilmentRoute(html) : null
   };
 }
 
@@ -389,6 +392,76 @@ function readSection(html, elementId) {
 
   const start = openTagMatch.index + openTagMatch[0].length;
   return sliceBalancedDivs(text, start);
+}
+
+// Inline scripts sit inside several of the regions read below (notably
+// #availability), so their source must be removed before any text is taken.
+function stripNonTextNodes(html) {
+  return String(html || "")
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, " ");
+}
+
+// Amazon renders an unavailable listing's #availability as a script-only node.
+// This guards against exporting that source if a script tag ever survives the
+// strip above (for example when the markup is truncated mid-script).
+const SCRIPT_SOURCE_PATTERN = /P\.when\(|aod-assets-loaded|function\s*\(|document\.|parseJSON\(/;
+
+function isScriptSource(value) {
+  return SCRIPT_SOURCE_PATTERN.test(String(value || ""));
+}
+
+export function extractStockStatus(html) {
+  const section = readSection(html, "availability");
+  if (!section) {
+    return "";
+  }
+
+  const text = normalizeText(stripTags(decodeHtml(stripNonTextNodes(section))));
+  return isScriptSource(text) ? "" : text;
+}
+
+export function extractDeliveryPromise(html) {
+  const text = String(html || "");
+  const section = readSection(text, "mir-layout-DELIVERY_BLOCK") || readSection(text, "deliveryBlockMessage");
+  if (!section) {
+    return "";
+  }
+
+  const cleaned = normalizeText(stripTags(decodeHtml(stripNonTextNodes(section))));
+  return isScriptSource(cleaned) ? "" : cleaned;
+}
+
+// Ships-from and sold-by share the offer-display feature markup already used by
+// extractSellerName. Either half can be missing, so the route is assembled from
+// whatever is present rather than printing a placeholder.
+export function extractFulfilmentRoute(html) {
+  const text = String(html || "");
+  const shipsFrom = readOfferFeature(text, "desktop-fulfiller-info");
+  const soldBy = readOfferFeature(text, "desktop-merchant-info");
+
+  return [
+    shipsFrom ? `Ships from ${shipsFrom}` : "",
+    soldBy ? `Sold by ${soldBy}` : ""
+  ].filter(Boolean).join(" / ");
+}
+
+function readOfferFeature(text, featureName) {
+  const pattern = new RegExp(
+    `offer-display-feature-name="${featureName}"[\\s\\S]{0,2000}?class="[^"]*offer-display-feature-text-message[^"]*"[^>]*>([\\s\\S]*?)</`,
+    "i"
+  );
+  const match = text.match(pattern);
+  if (!match?.[1]) {
+    return "";
+  }
+
+  const value = normalizeText(stripTags(decodeHtml(stripNonTextNodes(match[1]))));
+  if (!value || isScriptSource(value) || /^(ships? from|sold by)$/i.test(value)) {
+    return "";
+  }
+
+  return value;
 }
 
 function sliceBalancedDivs(text, start) {

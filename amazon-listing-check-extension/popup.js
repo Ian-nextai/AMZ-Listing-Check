@@ -6,6 +6,9 @@ const CHECKBOX_IDS = {
   titleHighlight: "check-title-highlight",
   rating: "check-rating",
   bulletPoints: "check-bullet-points",
+  stockStatus: "check-stock-status",
+  deliveryPromise: "check-delivery-promise",
+  fulfilmentRoute: "check-fulfilment-route",
   imageA: "check-image-a",
   imageDetail: "check-image-detail",
   criticalReviews: "check-critical-reviews",
@@ -13,6 +16,9 @@ const CHECKBOX_IDS = {
   addToCart: "check-add-to-cart",
   seller: "check-seller"
 };
+
+// These stay off until the user turns them on; every other check defaults on.
+const DEFAULT_OFF_CHECKS = new Set(["criticalReviews", "stockStatus", "deliveryPromise", "fulfilmentRoute"]);
 
 const dom = {
   asinInput: document.getElementById("asin-input"),
@@ -171,8 +177,8 @@ async function hydrateSavedSettings() {
     ? saved.savedChecks
     : {};
   for (const key of Object.keys(CHECKBOX_IDS)) {
-    // Critical reviews are opt-in: they stay off until the user turns them on.
-    dom[key].checked = key === "criticalReviews"
+    // Optional collection stays off until the user opts in.
+    dom[key].checked = DEFAULT_OFF_CHECKS.has(key)
       ? savedChecks[key] === true
       : savedChecks[key] !== false;
   }

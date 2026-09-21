@@ -6,13 +6,13 @@
 
 **Status**: Draft
 
-**Input**: User description: "为 AMZ-Check 插件增加「库存与配送状态」采集字段：勾选后，除现有字段外，额外抓取该 ASIN 的库存状态（如 In Stock / Currently unavailable / Only N left in stock）、配送方式（Ships from / Sold by）、预计送达日期区间，以及是否为 Prime。每个字段独立复选框，默认不勾选。缺失时留空并记日志，不让整行失败。"
+**Input**: User description: "为 AMZ-Check 插件增加「库存与配送状态」采集字段：勾选后，除现有字段外，额外抓取该 ASIN 的库存状态（如 In Stock / Currently unavailable / Only N left in stock）、配送方式（Ships from / Sold by）、预计送达日期区间。每个字段独立复选框，默认不勾选。缺失时留空并记日志，不让整行失败。"
 
 ## Context
 
 The extension currently reports whether the Buy Box renders (`Add To Cart` column) but
 not what the Buy Box actually says. Sellers evaluating a listing need to know whether it
-is in stock, how many units remain, when it would arrive, and whether it is Prime-eligible.
+is in stock, how many units remain, and when it would arrive.
 
 Live probing of two listings established which signals are actually available:
 
@@ -21,7 +21,6 @@ Live probing of two listings established which signals are actually available:
 | Stock text | `In Stock` in `#availability` | no availability node |
 | Delivery promise | `FREE delivery Saturday, September 26` | absent |
 | Ships from / Sold by | present in Buy Box | absent |
-| Prime badge | present | absent |
 
 So each signal is independently absent on real listings, which drives the requirement that
 they are collected and exported independently.
@@ -71,23 +70,24 @@ promise text; run an unavailable ASIN and confirm the cell is blank without fail
 
 ---
 
-### User Story 3 - See fulfilment route and Prime eligibility (Priority: P3)
+### User Story 3 - See the fulfilment route (Priority: P3)
 
-A seller ticks **配送方式** and **Prime** to distinguish Amazon-fulfilled Prime listings
-from third-party merchant-fulfilled ones.
+A seller ticks **配送方式** to distinguish Amazon-fulfilled listings from third-party
+merchant-fulfilled ones.
 
 **Why this priority**: Useful context, but it partially overlaps the existing `Seller`
 column, so it is the least urgent of the three.
 
-**Independent Test**: Run a Prime listing and confirm both cells populate; run a
-non-Prime listing and confirm the Prime cell reports the absence rather than failing.
+**Independent Test**: Run a listing with Buy Box fulfilment info and confirm the cell
+identifies who ships and who sells; run a listing without it and confirm the row still
+succeeds.
 
 **Acceptance Scenarios**:
 
 1. **Given** a listing with Buy Box fulfilment info, **When** the run completes, **Then**
    the shipping cell identifies who ships and who sells.
-2. **Given** a listing with no Prime badge, **When** the run completes, **Then** the Prime
-   cell reports a negative value rather than being blank or failing the row.
+2. **Given** a listing with no fulfilment info, **When** the run completes, **Then** the
+   cell is blank and the row still succeeds.
 
 ### Edge Cases
 
@@ -107,9 +107,9 @@ non-Prime listing and confirm the Prime cell reports the absence rather than fai
 
 ### Functional Requirements
 
-- **FR-001**: The popup MUST offer four independent checkboxes — 库存状态, 配送时效,
-  配送方式, Prime — alongside the existing ones.
-- **FR-002**: All four MUST default to unchecked, and MUST remain unchecked on a fresh
+- **FR-001**: The popup MUST offer three independent checkboxes — 库存状态, 配送时效,
+  配送方式 — alongside the existing ones.
+- **FR-002**: All three MUST default to unchecked, and MUST remain unchecked on a fresh
   profile even though other checkboxes default to checked.
 - **FR-003**: An unchecked column MUST be absent from the exported workbook entirely, not
   exported blank.
@@ -118,19 +118,17 @@ non-Prime listing and confirm the Prime cell reports the absence rather than fai
 - **FR-005**: The system MUST NOT treat embedded script source as stock text.
 - **FR-006**: The system MUST extract the delivery promise text when present.
 - **FR-007**: The system MUST extract who ships and who sells the item when present.
-- **FR-008**: The system MUST record Prime eligibility as a definitive yes/no when the
-  page settles, since a missing badge is meaningful.
-- **FR-009**: A missing value for any of these four fields MUST leave the cell blank, log
+- **FR-008**: A missing value for any of these three fields MUST leave the cell blank, log
   a note, and NOT fail the ASIN row.
-- **FR-010**: Extraction MUST remain in `src/core/` as a pure function taking HTML and
+- **FR-009**: Extraction MUST remain in `src/core/` as a pure function taking HTML and
   returning fields, with no `chrome.*` usage.
-- **FR-011**: Collapsed whitespace and HTML entities in extracted text MUST be normalised
+- **FR-010**: Collapsed whitespace and HTML entities in extracted text MUST be normalised
   the same way existing fields are.
 
 ### Key Entities
 
-- **Stock record**: the four new values for one ASIN — stock text, delivery promise,
-  fulfilment route, Prime eligibility — stored alongside the existing per-ASIN result.
+- **Stock record**: the three new values for one ASIN — stock text, delivery promise,
+  fulfilment route — stored alongside the existing per-ASIN result.
 - **Checkbox selection**: which optional fields the user enabled for this run; determines
   the exported column set.
 
@@ -142,7 +140,7 @@ non-Prime listing and confirm the Prime cell reports the absence rather than fai
   wording.
 - **SC-002**: On an unavailable listing, the row succeeds with a blank stock cell and a
   log note — 0 rows lost to these new fields across a 5-ASIN mixed batch.
-- **SC-003**: With all four unchecked, an export is byte-identical to one produced before
+- **SC-003**: With all three unchecked, an export is byte-identical to one produced before
   this feature existed.
 - **SC-004**: Every extracted value equals what the page displays for that field, verified
   against the live page for at least two listings (one stocked, one unavailable).
@@ -155,8 +153,6 @@ non-Prime listing and confirm the Prime cell reports the absence rather than fai
   set already requires for the Buy Box to render.
 - Availability and delivery text are read from the fully settled DOM, not from static
   HTML, because parts of the delivery block are rendered client-side.
-- "Prime" is derived from the Prime badge's presence; absence means not Prime, which is a
-  meaningful negative rather than missing data.
 - These fields are additive: no existing column, checkbox, or storage key changes shape.
 - Per the constitution, absent optional data never fails a row, and the produced workbook
   is verified rather than assumed.

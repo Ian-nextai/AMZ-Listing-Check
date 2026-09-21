@@ -38,7 +38,6 @@ Probed against a signed-in session, US zip 10010. These drive the implementation
 | Delivery | `#mir-layout-DELIVERY_BLOCK` | `FREE delivery Saturday, September 26 …` | absent |
 | Ships from | `[offer-display-feature-name="desktop-fulfiller-info"]` | present | absent |
 | Sold by | `[offer-display-feature-name="desktop-merchant-info"]` | present | absent |
-| Prime | `i.a-icon-prime` / `.prime-logo` | present | absent |
 
 **The script-rejection rule (FR-005) is the one non-obvious requirement**: on an
 unavailable listing `#availability` holds a `<script>` block, so raw `textContent` would
@@ -61,9 +60,9 @@ export JavaScript source as the stock value.
 
 **CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 Add `stockStatus`, `deliveryPromise`, `fulfilmentRoute`, `isPrime` to the `CHECK_KEYS` array in `amazon-listing-check-extension/src/core/task-state.js` so checkbox selections persist (FR-001)
-- [ ] T004 Persist the four fields in `recordTaskSuccess` and blank them in `recordTaskFailure` in `amazon-listing-check-extension/src/core/task-state.js`, mirroring how `criticalReviews` is handled (array default stays out; these are string/boolean and default to `""` / `null`)
-- [ ] T005 Extend `collectMissingFieldNotes` in `amazon-listing-check-extension/background.js` with a note per enabled-but-absent field (`无库存信息`, `无配送时效`, `无配送方式`, `无 Prime 标识`) so absences are logged and the row still succeeds (FR-009, constitution Principle III)
+- [ ] T003 Add `stockStatus`, `deliveryPromise`, `fulfilmentRoute` to the `CHECK_KEYS` array in `amazon-listing-check-extension/src/core/task-state.js` so checkbox selections persist (FR-001)
+- [ ] T004 Persist the three fields in `recordTaskSuccess` and blank them in `recordTaskFailure` in `amazon-listing-check-extension/src/core/task-state.js`, mirroring how `criticalReviews` is handled (array default stays out; these are string/boolean and default to `""` / `null`)
+- [ ] T005 Extend `collectMissingFieldNotes` in `amazon-listing-check-extension/background.js` with a note per enabled-but-absent field (`无库存信息`, `无配送时效`, `无配送方式`) so absences are logged and the row still succeeds (FR-009, constitution Principle III)
 
 **Checkpoint**: The plumbing exists; user stories can now proceed independently
 
@@ -118,25 +117,23 @@ a blank cell without failing.
 
 ---
 
-## Phase 5: User Story 3 - Fulfilment route and Prime (Priority: P3)
+## Phase 5: User Story 3 - Fulfilment route (Priority: P3)
 
-**Goal**: A run distinguishes Amazon-fulfilled Prime listings from merchant-fulfilled ones.
+**Goal**: A run distinguishes Amazon-fulfilled listings from merchant-fulfilled ones.
 
-**Independent Test**: A Prime listing populates both cells; a non-Prime listing reports a
-definitive negative rather than blank or failure.
+**Independent Test**: A listing with fulfilment info populates the cell; a listing without
+it leaves the cell blank and still succeeds.
 
 ### Tests for User Story 3
 
 - [ ] T018 [P] [US3] Add failing tests to `tests/stock-delivery.test.mjs`: `extractFulfilmentRoute` reports who ships and who sells for `stock-in-stock.html` and `""` for `stock-unavailable.html`
-- [ ] T019 [P] [US3] Add failing tests to `tests/stock-delivery.test.mjs`: `detectPrime` returns `true` for `stock-in-stock.html` and `false` (not `null`, not `""`) for `stock-unavailable.html`, per FR-008 treating absence as a definitive negative
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Implement and export `extractFulfilmentRoute(html)` in `amazon-listing-check-extension/src/core/amazon-parser.js` reading the `desktop-fulfiller-info` and `desktop-merchant-info` offer-display features (the same attribute pattern already used by `extractSellerName`), formatting as `Ships from X / Sold by Y` and omitting a missing half (FR-007)
-- [ ] T021 [US3] Implement and export `detectPrime(html)` in `amazon-listing-check-extension/src/core/amazon-parser.js` returning a boolean from the Prime badge (`i.a-icon-prime` or `.prime-logo`) (FR-008)
-- [ ] T022 [P] [US3] Add the `配送方式` (`fulfilmentRoute`) and `Prime` (`isPrime`) columns to `EXPORT_COLUMNS` in `amazon-listing-check-extension/src/core/export-plan.js`
-- [ ] T023 [US3] Add the `配送方式` and `Prime` checkboxes (`id="check-fulfilment-route"`, `id="check-prime"`) to `amazon-listing-check-extension/popup.html`, register them in `CHECKBOX_IDS`, and add both keys to `DEFAULT_OFF_CHECKS` in `amazon-listing-check-extension/popup.js`
-- [ ] T024 [US3] Wire `fulfilmentRoute` and `isPrime` into `extractAmazonListingChecks` in `amazon-listing-check-extension/src/core/amazon-parser.js`, and format `isPrime` for the cell as `true`/`false`/`""` the way `hasAddToCart` already does
+- [ ] T019 [US3] Implement and export `extractFulfilmentRoute(html)` in `amazon-listing-check-extension/src/core/amazon-parser.js` reading the `desktop-fulfiller-info` and `desktop-merchant-info` offer-display features (the same attribute pattern already used by `extractSellerName`), formatting as `Ships from X / Sold by Y` and omitting a missing half (FR-007)
+- [ ] T020 [P] [US3] Add the `配送方式` column (`key: "fulfilmentRoute"`, `check: "fulfilmentRoute"`) to `EXPORT_COLUMNS` in `amazon-listing-check-extension/src/core/export-plan.js`
+- [ ] T021 [US3] Add the `配送方式` checkbox (`id="check-fulfilment-route"`) to `amazon-listing-check-extension/popup.html`, register it in `CHECKBOX_IDS`, and add `"fulfilmentRoute"` to `DEFAULT_OFF_CHECKS` in `amazon-listing-check-extension/popup.js`
+- [ ] T022 [US3] Wire `fulfilmentRoute` into `extractAmazonListingChecks` in `amazon-listing-check-extension/src/core/amazon-parser.js`
 
 **Checkpoint**: All three stories independently functional
 
@@ -146,10 +143,10 @@ definitive negative rather than blank or failure.
 
 **Purpose**: Constitution Principle V — verify the artifact, not the source
 
-- [ ] T025 [P] Run `node --test tests/*.test.mjs` and confirm the whole suite is green with the new tests included
-- [ ] T026 Verify SC-003: with all four boxes unchecked, confirm the exported column set is byte-identical to the pre-feature layout by asserting `getActiveColumns` output against the existing `export-plan.test.mjs` expectations
-- [ ] T027 Verify the artifact: load `amazon-listing-check-extension/` in Chrome, run B0CKWX6W1L (in stock) and B0FK27RC39 (unavailable) with all four boxes ticked, then open the produced `.xlsx` from the downloads directory and confirm the stock cell distinguishes them, the Prime cell reads `true`/`false`, and the unavailable row still shows `success` in `amazon-listing-check-extension/background.js`'s export
-- [ ] T028 Bump `version` in `amazon-listing-check-extension/manifest.json` and rebuild `amazon-listing-check-extension.zip`
+- [ ] T023 [P] Run `node --test tests/*.test.mjs` and confirm the whole suite is green with the new tests included
+- [ ] T024 Verify SC-003: with all three boxes unchecked, confirm the exported column set is byte-identical to the pre-feature layout by asserting `getActiveColumns` output against the existing `export-plan.test.mjs` expectations
+- [ ] T025 Verify the artifact: load `amazon-listing-check-extension/` in Chrome, run B0CKWX6W1L (in stock) and B0FK27RC39 (unavailable) with all three boxes ticked, then open the produced `.xlsx` from the downloads directory and confirm the stock cell distinguishes them and the unavailable row still shows `success` in `amazon-listing-check-extension/background.js`'s export
+- [ ] T026 Bump `version` in `amazon-listing-check-extension/manifest.json` and rebuild `amazon-listing-check-extension.zip`
 
 ---
 
@@ -164,7 +161,7 @@ definitive negative rather than blank or failure.
 
 ### User Story Dependencies
 
-All three are independent after Phase 2. T012, T017 and T024 all edit
+All three are independent after Phase 2. T012, T017 and T022 all edit
 `extractAmazonListingChecks` in the same file, so they must be applied sequentially even
 though the stories themselves are independent.
 
@@ -194,15 +191,15 @@ Tests first (they must FAIL) → extractor → export column → checkbox → wi
 1. Setup + Foundational → plumbing ready
 2. US1 → 库存状态 works → validate → MVP
 3. US2 → 配送时效 added → validate
-4. US3 → 配送方式 + Prime added → validate
+4. US3 → 配送方式 added → validate
 5. Each addition leaves the previous stories working
 
 ---
 
 ## Notes
 
-- The four new checkboxes are the **only** ones that default to unchecked; the existing
-  ones stay checked. Getting this wrong is a silent regression, so T011/T016/T023
+- The three new checkboxes are the **only** ones that default to unchecked; the existing
+  ones stay checked. Getting this wrong is a silent regression, so T011/T016/T021
   explicitly cover it.
 - Absences must never fail a row (constitution Principle III, FR-009) — only title and
   category remain hard requirements.
