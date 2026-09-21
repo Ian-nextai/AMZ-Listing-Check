@@ -73,45 +73,75 @@ test("extractStockStatus returns empty when the availability node is absent", ()
   assert.equal(extractStockStatus("<html><body>nothing</body></html>"), "");
 });
 
-test("extractDeliveryPromise reads the delivery wording", () => {
+test("extractDeliveryPromise reports the standard and Prime delivery times", () => {
   const promise = extractDeliveryPromise(IN_STOCK);
 
   assert.ok(promise.length > 0, "in-stock listing should have a delivery promise");
-  assert.match(promise.toLowerCase(), /delivery/);
+  // Both audiences matter: what a normal buyer waits, and what Prime shortens it to.
+  assert.match(promise, /普通用户: /, "should label the standard delivery time");
+  assert.match(promise, /Prime: /, "should label the Prime delivery time");
+
+  // Times only — no "FREE delivery" boilerplate or cutoff wording.
+  assert.equal(/FREE|Order within|Join Prime/i.test(promise), false);
+});
+
+test("extractDeliveryPromise keeps the two times distinguishable", () => {
+  const promise = extractDeliveryPromise(IN_STOCK);
+  const lines = promise.split("\n").filter(Boolean);
+
+  assert.equal(lines.length, 2, "expected one line per audience");
+  assert.notEqual(lines[0], lines[1]);
+});
+
+test("extractDeliveryPromise never returns script source", () => {
+  const promise = extractDeliveryPromise(IN_STOCK);
+  for (const marker of SCRIPT_MARKERS) {
+    assert.equal(promise.includes(marker), false, `delivery text must not contain ${marker}`);
+  }
+});
+
+test("extractDeliveryPromise falls back to the standard time when there is no Prime line", () => {
+  const standardOnly = `
+    <div id="mir-layout-DELIVERY_BLOCK">
+      <div id="mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE">
+        <span data-csa-c-delivery-time="Sunday, September 27" data-csa-c-delivery-price="FREE">FREE delivery Sunday, September 27</span>
+      </div>
+    </div>`;
+
+  const promise = extractDeliveryPromise(standardOnly);
+  assert.match(promise, /Sunday, September 27/);
+  assert.equal(promise.includes("Prime"), false, "no Prime line to report");
 });
 
 test("extractDeliveryPromise returns empty for a listing without one", () => {
   assert.equal(extractDeliveryPromise(UNAVAILABLE), "");
 });
 
-test("extractDeliveryPromise never returns script source", () => {
-  const promise = extractDeliveryPromise(IN_STOCK);
-  for (const marker of SCRIPT_MARKERS) {
-    assert.equal(promise.includes(marker), false);
-  }
-});
-
-test("extractFulfilmentRoute reports who ships and who sells", () => {
+test("extractFulfilmentRoute reports whatever the page says for Ships from", () => {
   const route = extractFulfilmentRoute(IN_STOCK);
 
   assert.ok(route.length > 0, "in-stock listing should expose fulfilment info");
-  assert.match(route, /Ships from/);
-  assert.match(route, /Sold by/);
+  assert.match(route, /^Ships from /, "ships-from comes first");
+  assert.equal(route.includes("Sold by"), false, "the route is ships-from only; seller has its own column");
+});
+
+test("extractFulfilmentRoute writes the merchant name verbatim", () => {
+  // "what the page says" — Amazon, or the seller's own name, are both valid.
+  const merchant = `
+    <div offer-display-feature-name="desktop-fulfiller-info">
+      <span class="offer-display-feature-text-message">Some Merchant</span>
+    </div>`;
+  assert.equal(extractFulfilmentRoute(merchant), "Ships from Some Merchant");
+
+  const amazon = `
+    <div offer-display-feature-name="desktop-fulfiller-info">
+      <span class="offer-display-feature-text-message">Amazon</span>
+    </div>`;
+  assert.equal(extractFulfilmentRoute(amazon), "Ships from Amazon");
 });
 
 test("extractFulfilmentRoute returns empty when the Buy Box has no offer", () => {
   assert.equal(extractFulfilmentRoute(UNAVAILABLE), "");
-});
-
-test("extractFulfilmentRoute omits a missing half rather than printing a placeholder", () => {
-  const onlyShipsFrom = `
-    <div offer-display-feature-name="desktop-fulfiller-info">
-      <span class="offer-display-feature-text-message">Amazon</span>
-    </div>`;
-
-  const route = extractFulfilmentRoute(onlyShipsFrom);
-  assert.equal(route, "Ships from Amazon");
-  assert.equal(route.includes("Sold by"), false);
 });
 
 // --- Export wiring ---
@@ -146,16 +176,16 @@ test("the new columns carry their values into the row", () => {
       asin: "B0CKWX6W1L",
       status: "success",
       stockStatus: "In Stock",
-      deliveryPromise: "FREE delivery Saturday, September 26",
-      fulfilmentRoute: "Ships from Amazon / Sold by Marsram"
+      deliveryPromise: "普通用户: Saturday, September 26\nPrime: Today 6 PM - 11 PM",
+      fulfilmentRoute: "Ships from Amazon"
     }],
     CHECKS_ALL
   );
 
   const header = rows[0];
   assert.equal(rows[1][header.indexOf("库存状态")], "In Stock");
-  assert.equal(rows[1][header.indexOf("配送时效")], "FREE delivery Saturday, September 26");
-  assert.equal(rows[1][header.indexOf("配送方式")], "Ships from Amazon / Sold by Marsram");
+  assert.equal(rows[1][header.indexOf("配送时效")], "普通用户: Saturday, September 26\nPrime: Today 6 PM - 11 PM");
+  assert.equal(rows[1][header.indexOf("配送方式")], "Ships from Amazon");
 });
 
 test("absent new fields export as blank without failing the row", () => {
