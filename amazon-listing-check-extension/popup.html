@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon Listing Check Helper</title>
+  <style>
+    :root {
+      --bg: #f4f6ef;
+      --panel: #ffffff;
+      --line: #d8decc;
+      --text: #24321d;
+      --muted: #627259;
+      --primary: #1e6b52;
+      --primary-strong: #16513e;
+      --warning: #d48a0b;
+      --success: #1f8b4c;
+      --danger: #c53b2c;
+      --shadow: 0 18px 34px rgba(36, 50, 29, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      width: 430px;
+      min-height: 640px;
+      padding: 16px;
+      color: var(--text);
+      font: 13px/1.55 "Segoe UI", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(30, 107, 82, 0.14), transparent 36%),
+        linear-gradient(180deg, #fafcf8 0%, var(--bg) 100%);
+    }
+    .shell { display: flex; flex-direction: column; gap: 14px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.84);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: 18px; }
+    h2 { font-size: 15px; margin-bottom: 10px; }
+    .hero p, .hint { color: var(--muted); margin-top: 8px; }
+    .field-label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    textarea, select, button {
+      width: 100%;
+      font: inherit;
+      border-radius: 12px;
+    }
+    textarea, select {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      outline: none;
+    }
+    textarea {
+      min-height: 156px;
+      padding: 12px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+    }
+    select { height: 40px; padding: 0 12px; }
+    button {
+      min-height: 40px;
+      border: 0;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .button-row button { flex: 1 1 180px; }
+    .button-muted { color: var(--text); background: linear-gradient(135deg, #eff3ea, #dbe4d1); }
+    .button-warning { color: #5a3d00; background: linear-gradient(135deg, #ffd78e, var(--warning)); }
+    .button-success { background: linear-gradient(135deg, #21a158, var(--success)); }
+    .button-danger { background: linear-gradient(135deg, #ea5c4b, var(--danger)); }
+    .status-box {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #f8fbf4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .metric {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfdf9;
+    }
+    .metric-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .metric-value {
+      margin-top: 6px;
+      font-size: 16px;
+      font-weight: 800;
+      word-break: break-word;
+    }
+    .check-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .check-item {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfdf9;
+    }
+    .check-item input {
+      width: 16px;
+      height: 16px;
+      margin: 2px 0 0;
+      flex: 0 0 auto;
+    }
+    .check-item strong {
+      display: block;
+      font-size: 13px;
+    }
+    .check-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    #log {
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .log-entry {
+      margin: 0 0 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #f6f9f2;
+      border: 1px solid #dde6d4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log-entry.log-error {
+      color: var(--danger);
+      background: #fff2f1;
+      border-color: rgba(197, 59, 44, 0.2);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="card hero">
+      <h1>Amazon Listing Check Helper</h1>
+      <p>输入一批 ASIN，插件会自动复用一个 Amazon 工作标签页，逐个打开商品页面抓取标题、Highlight、评价、BP、图片与检查项，并导出成 XLSX。</p>
+      <div class="button-row" style="margin-top:12px;">
+        <button id="focus-runner-btn" class="button-muted">打开 Runner 监控页</button>
+        <button id="focus-worker-btn" class="button-muted">打开工作标签页</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>检查配置</h2>
+      <label class="field-label" for="asin-input">ASIN 列表</label>
+      <textarea id="asin-input" placeholder="每行一个，例如&#10;B0FYP69KJD&#10;B012345678"></textarea>
+
+      <div class="check-list">
+        <label class="check-item">
+          <input id="check-title" type="checkbox" checked>
+          <span>
+            <strong>标题</strong>
+            <span>抓取 `#productTitle` 标题文本。</span>
+          </span>
+        </label>
+        <label class="check-item">
+          <input id="check-title-highlight" type="checkbox" checked>
+          <span>
+            <strong>Highlight</strong>
+            <span>抓取标题下方的高亮副标题（`.dp-title-differentiators`），部分 ASIN 没有。</span>
+          </span>
+        </label>
+        <label class="check-item">
+          <input id="check-rating" type="checkbox" checked>
+          <span>
+            <strong>评价星级与数量</strong>
+            <span>星级与评价数分两列，如 `4.6` / `46747`。</span>
+          </span>
+        </label>
+        <label class="check-item">
+          <input id="check-bullet-points" type="checkbox" checked>
+          <span>
+            <strong>BP 五点描述</strong>
+            <span>抓取 About this item 全部要点，合并进同一个单元格。</span>
+          </span>
+        </label>
+        <label class="check-item">
+          <input id="check-image-a" type="checkbox" checked>
+          <span>
+            <strong>A图</strong>
+            <span>主图库第 2 张图，嵌入 Excel 单元格。</span>
+          </span>
+        </label>
+        <label class="check-item">
+          <input id="check-image-detail" type="checkbox" checked>
+          <span>
+            <strong>详情图</strong>
+            <span>详情描述 / A+ 图文第 1 张图，嵌入 Excel 单元格。</span>
+          </span>
+        </label>
+        <label class="check-item">
+          <input id="check-critical-reviews" type="checkbox">
+          <span>
+            <strong>差评收集</strong>
+            <span>下滑加载评论并筛选 1-3 星差评，最多 30 条，合并进一个单元格。需登录 Amazon 才能拿到完整评论页。</span>
+          </span>
+        </label>
+        <label class="check-item">
+          <input id="check-category" type="checkbox" checked>
+          <span>
+            <strong>大类检查</strong>
+            <span>抓取页面左上角导航中的大类文本。</span>
+          </span>
+        </label>
+        <label class="check-item">
+          <input id="check-add-to-cart" type="checkbox" checked>
+          <span>
+            <strong>购物车是否存在检查</strong>
+            <span>检查 `#add-to-cart-button` 是否存在。</span>
+          </span>
+        </label>
+        <label class="check-item">
+          <input id="check-seller" type="checkbox" checked>
+          <span>
+            <strong>卖家检查</strong>
+            <span>抓取 Buy Box 区域首个卖家文本。</span>
+          </span>
+        </label>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label class="field-label" for="zip-code-input">配送邮编</label>
+        <input id="zip-code-input" type="text" inputmode="numeric" maxlength="5" value="10010" style="width:100%;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);outline:none;">
+      </div>
+
+      <div style="margin-top:12px;">
+        <label class="field-label" for="delay-select">请求间隔</label>
+        <select id="delay-select">
+          <option value="750">0.75 秒 / ASIN</option>
+          <option value="1000" selected>1 秒 / ASIN</option>
+          <option value="1500">1.5 秒 / ASIN</option>
+          <option value="2000">2 秒 / ASIN</option>
+          <option value="3000">3 秒 / ASIN</option>
+        </select>
+      </div>
+
+      <p class="hint">失败结果会导出为 `failed` 行，并带上错误原因。</p>
+      <button id="start-btn" style="margin-top:12px;">开始检查</button>
+    </section>
+
+    <section class="card">
+      <h2>当前状态</h2>
+      <div id="progress-text" class="status-box">等待任务开始。</div>
+      <div class="metric-grid">
+        <div class="metric">
+          <div class="metric-label">任务状态</div>
+          <div id="status-value" class="metric-value">待命</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">当前 ASIN</div>
+          <div id="current-asin-value" class="metric-value">-</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">成功 / 失败</div>
+          <div id="summary-value" class="metric-value">0 / 0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">导出文件</div>
+          <div id="download-value" class="metric-value">-</div>
+        </div>
+      </div>
+      <div class="button-row" style="margin-top:12px;">
+        <button id="pause-btn" class="button-warning">暂停任务</button>
+        <button id="resume-btn" class="button-success">继续任务</button>
+      </div>
+      <div class="button-row" style="margin-top:10px;">
+        <button id="save-btn" class="button-muted">导出当前结果</button>
+        <button id="discard-btn" class="button-danger">放弃任务</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>任务日志</h2>
+      <div id="log"></div>
+    </section>
+  </main>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
