@@ -16,12 +16,14 @@ Every column is optional and controlled by a checkbox in the popup:
 | 差评 (critical reviews) | reviews page filtered to 1–3 stars, up to 30, numbered in one cell |
 | A图 | 2nd gallery image, embedded into the cell |
 | 详情图 | 1st description / A+ image, embedded into the cell |
-| Category | top navigation category label |
+| Category | department store tab in `#nav-subnav` (blank for books and other digital listings, which render none) |
 | Add To Cart | presence of `#add-to-cart-button` |
 | Seller | Buy Box merchant name |
+| 库存状态 / 配送时效 / 配送方式 | `#availability`, `#mir-layout-DELIVERY_BLOCK`, offer feature slots |
 
-Fields a listing simply does not have (no reviews, no Buy Box, no A+ content) leave the
-cell blank and log a note — they never fail the row.
+Fields a listing simply does not have (no reviews, no Buy Box, no A+ content, no
+department tab) leave the cell blank and log a note — they never fail the row. Only a
+missing title fails one.
 
 ## Install
 

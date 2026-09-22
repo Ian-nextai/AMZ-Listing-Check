@@ -31,12 +31,17 @@ driving `background.js` against a fake `chrome` API, not by mocking the task loo
 ### III. Absent Data Is Not an Error
 
 Amazon listings legitimately lack a highlight, reviews, a Buy Box, bullet points,
-or A+ images. A missing optional field leaves the cell blank and logs a note.
-Only a missing title or category fails an ASIN row.
+A+ images, or a department store tab. A missing optional field leaves the cell
+blank and logs a note. Only a missing title fails an ASIN row.
 
 A row must therefore never be discarded because an optional field was absent, and
 the collector must not silently substitute a weaker source (for example falling
 back from the reviews page to the truncated detail page) without recording why.
+
+The category column follows this rule too: books and other digital listings render
+no department subnav at all, so a blank category is the correct answer there rather
+than a reason to fail the row. When a field is hard to obtain for a whole class of
+listings, leaving it blank is preferred over guessing a weaker value.
 
 ### IV. Zero Build, Vendored Dependencies
 
@@ -89,4 +94,4 @@ editing this file in a commit that states which principle changed and why. Any
 practice listed here that is no longer true of the codebase must be either
 restored or removed from the constitution — a stale principle is worse than none.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-21 | **Last Amended**: 2026-09-21
+**Version**: 1.1.0 | **Ratified**: 2026-09-21 | **Last Amended**: 2026-09-22

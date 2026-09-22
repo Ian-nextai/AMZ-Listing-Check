@@ -167,17 +167,35 @@ function stripReviewNoise(value) {
     .trim();
 }
 
+// The department store tab sits in the page's own sub-navigation bar, which
+// Amazon only renders for physical-goods departments. Books and other digital
+// listings have no #nav-subnav at all, so those legitimately yield nothing.
+const NAV_STORE_TAB_PATTERN =
+  /<a[^>]*class="[^"]*\bnav-a\b[^"]*\bnav-b\b[^"]*"[^>]*aria-label="([^"]+)"[^>]*>/i;
+
 export function extractCategoryName(html) {
   const text = String(html || "");
 
-  const navLabelMatch = text.match(
-    /<a[^>]*class="[^"]*\bnav-a\b[^"]*\bnav-b\b[^"]*"[^>]*aria-label="([^"]+)"[^>]*>/i
-  );
-  if (navLabelMatch?.[1]) {
-    return normalizeText(decodeHtml(navLabelMatch[1]));
+  // Read the subnav first: anchoring on it keeps the answer tied to the
+  // department the listing is actually filed under, rather than to whichever
+  // nav anchor happens to appear first in a full page dump.
+  const subnav = readSection(text, "nav-subnav");
+  const anchor = readStoreTab(subnav) || readStoreTab(text);
+  return anchor && !isScriptSource(anchor) ? anchor : "";
+}
+
+function readStoreTab(text) {
+  if (!text) {
+    return "";
   }
 
-  const navContentMatch = text.match(
+  const labelled = String(text).match(NAV_STORE_TAB_PATTERN);
+  if (labelled?.[1]) {
+    return normalizeText(decodeHtml(labelled[1]));
+  }
+
+  // Newer renders drop the aria-label, leaving the label in a child span.
+  const navContentMatch = String(text).match(
     /<a[^>]*class="[^"]*\bnav-a\b[^"]*\bnav-b\b[^"]*"[^>]*>[\s\S]*?<span[^>]*class="[^"]*\bnav-a-content\b[^"]*"[^>]*>([\s\S]*?)<\/span>/i
   );
   return normalizeText(stripTags(decodeHtml(navContentMatch?.[1] || "")));
@@ -490,26 +508,59 @@ function readSlot(section, slotName) {
   return sliceBalancedDivs(body, 0);
 }
 
-// Reports who ships the item exactly as the page states it — "Amazon" or the
-// merchant's own name. The seller already has its own column, so this is the
-// ships-from half only.
+// Reports who ships the item exactly as the page states it: "Amazon", or the
+// merchant's own name. Most listings expose a fulfiller slot; some
+// merchant-fulfilled listings expose only a seller slot, which names the same
+// party, so it is used as a fallback.
 export function extractFulfilmentRoute(html) {
-  const shipsFrom = readOfferFeature(String(html || ""), "desktop-fulfiller-info");
-  return shipsFrom ? `Ships from ${shipsFrom}` : "";
+  const text = String(html || "");
+  const shipper =
+    readOfferFeature(text, "desktop-fulfiller-info") ||
+    readOfferFeature(text, "desktop-merchant-info");
+
+  return shipper ? `Ships from ${shipper}` : "";
 }
 
+// Values that name a slot rather than a merchant. The feature markup carries
+// both a label node ("Shipper / Seller") and a text node, so a placeholder can
+// otherwise be mistaken for the answer.
+const OFFER_PLACEHOLDER_PATTERN =
+  /^(shipper\s*\/\s*seller|ships? from( and sold by)?|sold by|seller|shipper|learn more( about the seller)?|see more|details?|unknown|-+)$/i;
+
+function isOfferPlaceholder(value) {
+  return OFFER_PLACEHOLDER_PATTERN.test(String(value || "").trim());
+}
+
+// Reads the *value* node of an offer-display feature. Each feature appears
+// twice: once as `offer-display-feature-label` (the heading, e.g. "Ships from")
+// and once as `offer-display-feature-text` (the answer). Matching on the shared
+// feature name alone would read the heading instead of the value.
 function readOfferFeature(text, featureName) {
   const pattern = new RegExp(
-    `offer-display-feature-name="${featureName}"[\\s\\S]{0,2000}?class="[^"]*offer-display-feature-text-message[^"]*"[^>]*>([\\s\\S]*?)</`,
+    `class="[^"]*offer-display-feature-text[^"]*"[^>]*offer-display-feature-name="${featureName}"` +
+    `|offer-display-feature-name="${featureName}"[^>]*class="[^"]*offer-display-feature-text[^"]*"`,
     "i"
   );
-  const match = text.match(pattern);
-  if (!match?.[1]) {
+  const anchor = pattern.exec(text);
+  if (!anchor) {
     return "";
   }
 
-  const value = normalizeText(stripTags(decodeHtml(stripNonTextNodes(match[1]))));
-  if (!value || isScriptSource(value) || /^(ships? from|sold by)$/i.test(value)) {
+  const openTagEnd = text.indexOf(">", anchor.index + anchor[0].length);
+  if (openTagEnd < 0) {
+    return "";
+  }
+
+  const body = sliceBalancedDivs(text, openTagEnd + 1);
+  const messageMatch = body.match(
+    /class="[^"]*offer-display-feature-text-message[^"]*"[^>]*>([\s\S]*?)</i
+  );
+  if (!messageMatch?.[1]) {
+    return "";
+  }
+
+  const value = normalizeText(stripTags(decodeHtml(stripNonTextNodes(messageMatch[1]))));
+  if (!value || isScriptSource(value) || isOfferPlaceholder(value)) {
     return "";
   }
 

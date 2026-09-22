@@ -1341,10 +1341,9 @@ async function sleepWithPauseChecks(delayMs) {
 }
 
 function validateExtractedChecks(selectedChecks, extractedChecks, html) {
-  if (selectedChecks.category && !extractedChecks.categoryName) {
-    throw new Error("未找到大类节点。");
-  }
-
+  // Only the title is required. Books and other digital listings render no
+  // department subnav at all, so an absent category is missing data, not a
+  // failure — it is reported as a note and the row still exports.
   if (selectedChecks.title && !extractedChecks.title) {
     throw new Error("未找到标题节点。");
   }
@@ -1356,6 +1355,9 @@ function validateExtractedChecks(selectedChecks, extractedChecks, html) {
 function collectMissingFieldNotes(selectedChecks, extractedChecks) {
   const notes = [];
 
+  if (selectedChecks.category && !extractedChecks.categoryName) {
+    notes.push("无大类");
+  }
   if (selectedChecks.titleHighlight && !extractedChecks.titleHighlight) {
     notes.push("无 Highlight");
   }

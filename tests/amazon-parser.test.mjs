@@ -284,6 +284,68 @@ test("extractCategoryName supports All Beauty top nav layout", () => {
   assert.equal(extractCategoryName(AMAZON_SOLD_BY_HTML), "All Beauty");
 });
 
+// The store tab is the anchor in the page's own subnav bar, which is what the
+// popup calls the "大类" (department). Real structure captured from live pages.
+const SUBNAV_AUTOMOTIVE = `
+<div id="nav-subnav" data-category="automotive">
+  <a href="/automotive-auto-truck-replacements-parts/b/?node=15684181" class="nav-a nav-b" aria-label="Automotive" tabindex="0">
+    <span class="nav-a-content"> Automotive </span>
+  </a>
+  <a href="/Vehicles/b/?node=10677469011" class="nav-a" aria-label="Amazon Autos" tabindex="0">
+    <span class="nav-a-content"> Amazon Autos </span>
+  </a>
+</div>`;
+
+const SUBNAV_APPLE = `
+<div id="nav-subnav" data-category="apple-devices">
+  <a href="/apple/b/?node=16735455011" class="nav-a nav-b" aria-label="Apple Products" tabindex="0">
+    <span class="nav-a-content"> Apple Products </span>
+  </a>
+  <a href="/iPad/b/?node=1" class="nav-a" aria-label="iPad" tabindex="0">
+    <span class="nav-a-content"> iPad </span>
+  </a>
+</div>`;
+
+test("extractCategoryName reads the department store tab from the subnav bar", () => {
+  assert.equal(extractCategoryName(SUBNAV_AUTOMOTIVE), "Automotive");
+  assert.equal(extractCategoryName(SUBNAV_APPLE), "Apple Products");
+});
+
+// A page dump carries many nav anchors; the answer must come from the subnav,
+// not from whichever .nav-a.nav-b happens to appear first in the markup.
+test("extractCategoryName prefers the subnav over an earlier decoy anchor", () => {
+  const decoy = `<a class="nav-a nav-b" aria-label="Books"><span class="nav-a-content">Books</span></a>`;
+  assert.equal(extractCategoryName(decoy + SUBNAV_APPLE), "Apple Products");
+});
+
+// Books and other digital listings render no department subnav at all, so the
+// field is legitimately blank rather than filled with a neighboring department.
+test("extractCategoryName returns empty when the listing has no department subnav", () => {
+  const bookPage = `
+    <div id="nav-subnav-placeholder"></div>
+    <a class="nav-a" aria-label="Books"><span class="nav-a-content">Books</span></a>
+    <div id="wayfinding-breadcrumbs_feature_div">
+      <a href="/Books/b/?node=283155">Books</a>
+    </div>`;
+
+  assert.equal(extractCategoryName(bookPage), "");
+});
+
+test("extractCategoryName falls back to the store tab label when aria-label is absent", () => {
+  const noAria = `
+    <div id="nav-subnav" data-category="automotive">
+      <a href="/automotive/b/?node=15684181" class="nav-a nav-b" tabindex="0">
+        <span class="nav-a-content"> Automotive </span>
+      </a>
+    </div>`;
+
+  assert.equal(extractCategoryName(noAria), "Automotive");
+});
+
+test("extractCategoryName returns empty for a page without any store tab", () => {
+  assert.equal(extractCategoryName("<html><body>nothing here</body></html>"), "");
+});
+
 test("hasAddToCartButton returns true when the add to cart button exists", () => {
   assert.equal(hasAddToCartButton(SAMPLE_HTML), true);
 });
