@@ -17,10 +17,29 @@ const readFixture = (name) => fs.readFileSync(path.join(fixturesDir, name), "utf
 // Captured from live amazon.com listings via a signed-in session (US zip 10010).
 const IN_STOCK = readFixture("stock-in-stock.html");       // B0CKWX6W1L
 const UNAVAILABLE = readFixture("stock-unavailable.html"); // B0FK27RC39
+// A merchant-fulfilled listing whose offer slot renders the label
+// "Shipper / Seller" instead of a name.
+const PLACEHOLDER_SELLER = readFixture("stock-placeholder-seller.html"); // B0GT4L22S2
 
 // Guards every stock assertion: the unavailable listing's #availability holds a
 // <script>, so a naive textContent read would export JavaScript as the stock value.
 const SCRIPT_MARKERS = ["P.when(", "function(", "document.", "var ", "aod-assets-loaded"];
+
+// Amazon renders each offer feature twice: an `offer-display-feature-label` node
+// holding the heading ("Ships from") and an `offer-display-feature-text` node
+// holding the value. Both carry the same feature name, so fixtures must
+// reproduce that pairing or they would not exercise the real selector.
+function offerFeature(featureName, label, value) {
+  return `
+    <div class="offer-display-feature-label celwidget" offer-display-feature-name="${featureName}">
+      <div class="a-spacing-none"><span class="a-size-small a-color-tertiary">${label}</span></div>
+    </div>
+    <div class="offer-display-feature-text a-size-small" offer-display-feature-name="${featureName}">
+      <div class="offer-display-feature-text a-spacing-none">
+        <span class="a-size-small offer-display-feature-text-message">${value}</span>
+      </div>
+    </div>`;
+}
 
 test("fixtures are the real pages, not stubs", () => {
   assert.ok(IN_STOCK.length > 500000, "in-stock fixture should be a full captured page");
@@ -127,21 +146,53 @@ test("extractFulfilmentRoute reports whatever the page says for Ships from", () 
 
 test("extractFulfilmentRoute writes the merchant name verbatim", () => {
   // "what the page says" — Amazon, or the seller's own name, are both valid.
-  const merchant = `
-    <div offer-display-feature-name="desktop-fulfiller-info">
-      <span class="offer-display-feature-text-message">Some Merchant</span>
-    </div>`;
-  assert.equal(extractFulfilmentRoute(merchant), "Ships from Some Merchant");
+  assert.equal(extractFulfilmentRoute(offerFeature("desktop-fulfiller-info", "Ships from", "Some Merchant")), "Ships from Some Merchant");
+  assert.equal(extractFulfilmentRoute(offerFeature("desktop-fulfiller-info", "Ships from", "Amazon")), "Ships from Amazon");
+});
 
-  const amazon = `
-    <div offer-display-feature-name="desktop-fulfiller-info">
-      <span class="offer-display-feature-text-message">Amazon</span>
-    </div>`;
-  assert.equal(extractFulfilmentRoute(amazon), "Ships from Amazon");
+test("extractFulfilmentRoute prefers the fulfiller over the seller", () => {
+  const both =
+    offerFeature("desktop-fulfiller-info", "Ships from", "Amazon") +
+    offerFeature("desktop-merchant-info", "Sold by", "Marsram");
+
+  assert.equal(extractFulfilmentRoute(both), "Ships from Amazon");
+});
+
+// Some merchant-fulfilled listings render no fulfiller slot, only a seller name.
+test("extractFulfilmentRoute falls back to the seller when there is no fulfiller slot", () => {
+  const sellerOnly = offerFeature("desktop-merchant-info", "Sold by", "czyaoshan");
+  assert.equal(extractFulfilmentRoute(sellerOnly), "Ships from czyaoshan");
+});
+
+// The B0GT4L22S2 listing renders these placeholders instead of a name; writing
+// either of them into the cell would be inventing data.
+test("extractFulfilmentRoute rejects placeholder labels", () => {
+  for (const label of ["Shipper / Seller", "Ships from", "Sold by", "Learn more about the seller", "-"]) {
+    const html =
+      offerFeature("desktop-fulfiller-info", "Ships from", label) +
+      offerFeature("desktop-merchant-info", "Sold by", label);
+
+    assert.equal(extractFulfilmentRoute(html), "", `"${label}" must not be reported as a shipper`);
+  }
 });
 
 test("extractFulfilmentRoute returns empty when the Buy Box has no offer", () => {
   assert.equal(extractFulfilmentRoute(UNAVAILABLE), "");
+});
+
+// The real B0GT4L22S2 page renders no fulfiller slot and shows "Shipper / Seller"
+// as the label; the seller name lives in the sibling text node, whose embedded
+// state carries this listing's own asin, so it is the correct answer here.
+test("extractFulfilmentRoute uses the seller when the listing has no fulfiller slot", () => {
+  const route = extractFulfilmentRoute(PLACEHOLDER_SELLER);
+
+  assert.equal(route, "Ships from czyaoshan");
+  // The label is a slot heading, never the value.
+  assert.equal(/Shipper/i.test(route), false);
+});
+
+test("extractStockStatus works on the merchant-fulfilled listing too", () => {
+  assert.match(extractStockStatus(PLACEHOLDER_SELLER), /left in stock/i);
 });
 
 // --- Export wiring ---
