@@ -29,7 +29,7 @@ missing title fails one.
 
 1. Download or clone this repository.
 2. Open `chrome://extensions`, enable **Developer mode**.
-3. Click **Load unpacked** and select the `amazon-listing-check-extension` folder.
+3. Click **Load unpacked** and select the `assets/extension` folder.
 
 ## Usage
 
@@ -44,7 +44,7 @@ missing title fails one.
 ## Architecture
 
 ```
-amazon-listing-check-extension/
+assets/extension/
 ├── background.js              # service worker: task loop, navigation, scraping, export
 ├── popup.html / popup.js      # input, checkboxes, progress, controls
 ├── runner.html / runner.js    # monitoring page (survives popup close)
@@ -86,15 +86,29 @@ pause) against a fake `chrome` API.
 node --test tests/*.test.mjs
 ```
 
+## Use as a Hermes skill (agent-ready)
+
+This repo is laid out as a self-contained [Hermes Agent](https://hermes-agent.nousresearch.com/docs) skill —
+clone it straight into your skills directory and the agent can drive the whole pipeline:
+
+```bash
+git clone git@github.com:keithqwq/AMZ-Check-CRX.git ~/.hermes/skills/devops/amazon-listing-check
+```
+
+`SKILL.md` at the repo root defines the agent workflow (pre-run confirmation, login gate
+for reviews, artifact verification, delivery rules). Humans can still use the extension
+standalone: load `assets/extension/` via `chrome://extensions` → Developer mode →
+Load unpacked.
+
 ## Headless runner (server-side automation)
 
 Run this extension in headless Chromium on a server — no manual browser clicking.
 See **[docs/runner.md](docs/runner.md)** for the full pipeline:
 
 ```
-./runner/setup.sh                                   # env check & auto-install
-./runner/run.sh "B0GY48WL28,B0GY49QL6C"             # one-shot: Chrome+CRX → xlsx
-./runner/run.sh "B0XXXXXXX" --with-reviews --feishu # login-gated reviews + delivery
+./scripts/setup.sh                                   # env check & auto-install
+./scripts/run.sh "B0GY48WL28,B0GY49QL6C"             # one-shot: Chrome+CRX → xlsx
+./scripts/run.sh "B0XXXXXXX" --with-reviews --feishu # login-gated reviews + delivery
 ```
 
 Runner includes a zero-dependency CDP driver (`drive.mjs`/`cdp.mjs`), Amazon login-state

@@ -8,8 +8,8 @@ import {
   extractStockStatus,
   extractDeliveryPromise,
   extractFulfilmentRoute
-} from "../amazon-listing-check-extension/src/core/amazon-parser.js";
-import { buildWorksheetRows, getActiveColumns } from "../amazon-listing-check-extension/src/core/export-plan.js";
+} from "../assets/extension/src/core/amazon-parser.js";
+import { buildWorksheetRows, getActiveColumns } from "../assets/extension/src/core/export-plan.js";
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const readFixture = (name) => fs.readFileSync(path.join(fixturesDir, name), "utf8");

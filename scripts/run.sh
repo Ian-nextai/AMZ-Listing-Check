@@ -43,7 +43,7 @@ while [ $# -gt 0 ]; do
 done
 
 CHROME=/root/.cache/ms-playwright/chromium-1234/chrome-linux/chrome
-EXT="$SKILL_DIR/amazon-listing-check-extension"
+EXT="$SKILL_DIR/assets/extension"
 PROFILE=/root/.hermes/amazon-profile
 PORT=19222
 

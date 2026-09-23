@@ -48,14 +48,14 @@ apt-get install -y libatk-bridge2.0-0
 ### 3. 自检
 
 ```bash
-./runner/setup.sh          # 检查并自动补装缺件
-./runner/setup.sh --check  # 只诊断
+./scripts/setup.sh          # 检查并自动补装缺件
+./scripts/setup.sh --check  # 只诊断
 ```
 
 ### 4. 跑任务
 
 ```bash
-./runner/run.sh "B0GY48WL28,B0GY49QL6C" [选项]
+./scripts/run.sh "B0GY48WL28,B0GY49QL6C" [选项]
 ```
 
 | 选项 | 说明 |
@@ -96,7 +96,7 @@ cloudflared tunnel --url http://127.0.0.1:8788 &       # 输出临时公网 URL
 
 # 用户在手机浏览器打开 https://<随机>.trycloudflare.com/vnc.html 亲手登录
 # 登录后：正常退出 Chrome（cookie 落盘）→ 拆除全部组件 → 删密码文件
-./runner/run.sh <ASINs> --check-login   # 验证：loggedIn:true, "Hello, <用户名>"
+./scripts/run.sh <ASINs> --check-login   # 验证：loggedIn:true, "Hello, <用户名>"
 ```
 
 > 注意：直接导航 `amazon.com/ap/signin` 可能落到错误页；带 `openid.return_to` 参数从主页流程进入才稳。
