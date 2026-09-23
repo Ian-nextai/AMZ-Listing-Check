@@ -85,3 +85,20 @@ pause) against a fake `chrome` API.
 ```bash
 node --test tests/*.test.mjs
 ```
+
+## Headless runner (server-side automation)
+
+Run this extension in headless Chromium on a server — no manual browser clicking.
+See **[docs/runner.md](docs/runner.md)** for the full pipeline:
+
+```
+./runner/setup.sh                                   # env check & auto-install
+./runner/run.sh "B0GY48WL28,B0GY49QL6C"             # one-shot: Chrome+CRX → xlsx
+./runner/run.sh "B0XXXXXXX" --with-reviews --feishu # login-gated reviews + delivery
+```
+
+Runner includes a zero-dependency CDP driver (`drive.mjs`/`cdp.mjs`), Amazon login-state
+detection (`check-login.mjs`), auto-retry for flaky ASINs, and an optional Feishu delivery
+channel. Two extension tweaks are required for headless operation and already applied:
+`TAB_LOAD_TIMEOUT_MS` 45000→150000 (huge listing pages exceed 45s on ARM) and a fixed
+manifest `key` (stable extension ID for CDP targeting).
