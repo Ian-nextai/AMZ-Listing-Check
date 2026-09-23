@@ -5,7 +5,7 @@ import {
   arrayBufferToBase64,
   fetchImageAsBase64,
   pickImageExtension
-} from "../amazon-listing-check-extension/src/core/image-fetch.js";
+} from "../assets/extension/src/core/image-fetch.js";
 
 test("pickImageExtension prefers the response content type", () => {
   assert.equal(pickImageExtension("image/jpeg", "https://x/a.png"), "jpg");

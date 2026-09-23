@@ -10,8 +10,8 @@ import {
   formatReviewEntry,
   detectSignInPage,
   isSignInUrl
-} from "../amazon-listing-check-extension/src/core/amazon-parser.js";
-import { buildWorksheetRows } from "../amazon-listing-check-extension/src/core/export-plan.js";
+} from "../assets/extension/src/core/amazon-parser.js";
+import { buildWorksheetRows } from "../assets/extension/src/core/export-plan.js";
 
 function reviewBlock({ stars, title, body, date = "Reviewed in the United States on January 1, 2026", author = "Someone" }) {
   return `
@@ -217,7 +217,7 @@ test("the 差评 column is empty when the check is off or nothing was found", ()
 // The detail page truncates review bodies, so the same review looks like two
 // different entries when merged with the reviews page copy.
 test("a review scraped from two pages is not listed twice", async () => {
-  const { dedupeReviews } = await import("../amazon-listing-check-extension/src/core/review-dedupe.js");
+  const { dedupeReviews } = await import("../assets/extension/src/core/review-dedupe.js");
 
   const truncated = { stars: 1, title: "2011 Jeep Wrangler", body: "These are the wrong resistance", author: "The Amazin Mike", date: "Reviewed in the United States on January 19, 2025" };
   const full = { stars: 1, title: "2011 Jeep Wrangler", body: "These are the wrong resistance for the 3.8l They work great when cold but as they warm up they stop working and create misfires, these are cheap but I recommend getting OEM replacements", author: "The Amazin Mike", date: "Reviewed in the United States on January 19, 2025" };
@@ -228,7 +228,7 @@ test("a review scraped from two pages is not listed twice", async () => {
 });
 
 test("distinct reviews by the same author are kept apart", async () => {
-  const { dedupeReviews } = await import("../amazon-listing-check-extension/src/core/review-dedupe.js");
+  const { dedupeReviews } = await import("../assets/extension/src/core/review-dedupe.js");
 
   const a = { stars: 1, title: "Bad coils", body: "x", author: "Mike", date: "January 1, 2025" };
   const b = { stars: 2, title: "Different complaint", body: "y", author: "Mike", date: "February 2, 2025" };

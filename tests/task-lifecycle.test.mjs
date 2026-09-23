@@ -59,7 +59,7 @@ function installFakeChrome() {
 let moduleCounter = 0;
 async function loadBackground() {
   moduleCounter += 1;
-  return import(`../amazon-listing-check-extension/background.js?case=${moduleCounter}`);
+  return import(`../assets/extension/background.js?case=${moduleCounter}`);
 }
 
 const ASINS = ["B0CKWX6W1L", "B00FRRXO0Y", "B0D1XD1ZV3"];

@@ -5,7 +5,7 @@ import {
   isZipCodeAppliedToLocationText,
   normalizeAsins,
   normalizeZipCode
-} from "../amazon-listing-check-extension/src/core/task-utils.js";
+} from "../assets/extension/src/core/task-utils.js";
 
 test("normalizeAsins trims, uppercases, extracts ASINs, and removes duplicates", () => {
   assert.deepEqual(

@@ -16,7 +16,7 @@ import {
   extractSellerName,
   extractTitleHighlight,
   hasAddToCartButton
-} from "../amazon-listing-check-extension/src/core/amazon-parser.js";
+} from "../assets/extension/src/core/amazon-parser.js";
 
 const SAMPLE_HTML = `
 <!doctype html>

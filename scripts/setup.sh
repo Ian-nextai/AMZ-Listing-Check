@@ -30,7 +30,7 @@ if [ -z "$MISSING" ]; then ok "全部共享库就绪"; else
 fi
 
 echo "== 3. 扩展 =="
-EXT="$SKILL_DIR/amazon-listing-check-extension"
+EXT="$SKILL_DIR/assets/extension"
 if [ -f "$EXT/manifest.json" ]; then
   KEY=$(python3 -c "import json;print(json.load(open('$EXT/manifest.json')).get('key','') ) " 2>/dev/null)
   [ -n "$KEY" ] && ok "manifest 已含固定 key（扩展 ID 恒定 ahdchbhmgiaciipjijlckjpheflbfiin）" || warn "manifest 无 key → 每次启动扩展 ID 会变，drive.mjs 兜底逻辑可处理但不稳"

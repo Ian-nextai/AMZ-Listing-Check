@@ -106,7 +106,7 @@ async function runOneAsin(pageHtml, checks) {
   const originalListener = globalThis.chrome.runtime.onMessage.addListener;
 
   moduleCounter += 1;
-  await import(`../amazon-listing-check-extension/background.js?case=${moduleCounter}`);
+  await import(`../assets/extension/background.js?case=${moduleCounter}`);
 
   // background.js broadcasts its log lines to any open popup; capture them.
   globalThis.chrome.runtime.sendMessage = async (message) => {

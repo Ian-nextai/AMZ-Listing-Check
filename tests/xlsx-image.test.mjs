@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { unzipSync } from "../amazon-listing-check-extension/vendor/fflate.js";
+import { unzipSync } from "../assets/extension/vendor/fflate.js";
 
-import * as XLSX from "../amazon-listing-check-extension/vendor/xlsx.mjs";
+import * as XLSX from "../assets/extension/vendor/xlsx.mjs";
 import {
   buildDrawingRelsXml,
   buildDrawingXml,
@@ -11,7 +11,7 @@ import {
   columnToIndex,
   embedImagesIntoXlsx,
   normalizeExtension
-} from "../amazon-listing-check-extension/src/core/xlsx-image.js";
+} from "../assets/extension/src/core/xlsx-image.js";
 
 // 1x1 PNG.
 const PNG_BASE64 =

@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { extractAmazonListingChecks } from "../amazon-listing-check-extension/src/core/amazon-parser.js";
-import { buildImagePlacements, buildWorksheetRows } from "../amazon-listing-check-extension/src/core/export-plan.js";
+import { extractAmazonListingChecks } from "../assets/extension/src/core/amazon-parser.js";
+import { buildImagePlacements, buildWorksheetRows } from "../assets/extension/src/core/export-plan.js";
 import {
   createTask,
   recordTaskFailure,
   recordTaskSuccess
-} from "../amazon-listing-check-extension/src/core/task-state.js";
+} from "../assets/extension/src/core/task-state.js";
 
 const SAMPLE_SUCCESS_HTML = `
 <div id="titleSection">

@@ -8,7 +8,7 @@ import {
   recordTaskFailure,
   recordTaskSuccess,
   summarizeTask
-} from "../amazon-listing-check-extension/src/core/task-state.js";
+} from "../assets/extension/src/core/task-state.js";
 
 test("task flow tracks remaining items and success summary", () => {
   let task = createTask(["B0FYP69KJD", "B012345678"], {

@@ -7,7 +7,7 @@ import {
   buildWorksheetRows,
   encodeColumnName,
   getActiveColumns
-} from "../amazon-listing-check-extension/src/core/export-plan.js";
+} from "../assets/extension/src/core/export-plan.js";
 
 const ALL_CHECKS = {
   title: true,
