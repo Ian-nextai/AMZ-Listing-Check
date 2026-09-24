@@ -37,9 +37,32 @@ const browserWs = await getBrowserWs(PORT);
 const c = await ws(browserWs);
 const log = (m) => console.log(`[${new Date().toISOString().slice(11, 19)}]`, m);
 
+const crypto = await import("node:crypto");
+const fsMod = await import("node:fs");
+// 从 manifest 的固定 key 推导扩展 ID（sha256 前 16 字节 → mpdecimal），避免把
+// Hangouts 等内置组件扩展（同样以 chrome-extension:// 开头）误认成目标
+function extensionIdFromKey(manifestPath) {
+  try {
+    const key = JSON.parse(fsMod.readFileSync(manifestPath, "utf8")).key;
+    if (!key) return "";
+    const h = crypto.createHash("sha256").update(Buffer.from(key, "base64")).digest().subarray(0, 16);
+    return [...h].map(b => String.fromCharCode(97 + (b >> 4), 97 + (b & 15))).join("");
+  } catch { return ""; }
+}
+const EXT_DIR = new URL("../assets/extension/", import.meta.url).pathname;
+const EXT_ID = extensionIdFromKey(`${EXT_DIR}manifest.json`);
+
 // 定位/唤醒 runner 页
 let { targetInfos } = await c.send("Target.getTargets");
-let runner = targetInfos.find(t => t.url.includes("runner.html") && !t.url.includes("admccjkmock"));
+let runner = targetInfos.find(t => t.url.includes("runner.html") && !t.url.includes("admccjkmock")
+  && (!EXT_ID || t.url.includes(EXT_ID)));
+if (!runner && EXT_ID) {
+  // 固定 ID 已知：直接开 runner.html（Chrome 153 的 Target.createTarget 会走 internal redirect）
+  await c.send("Target.createTarget", { url: `chrome-extension://${EXT_ID}/runner.html` });
+  await new Promise(r => setTimeout(r, 4000));
+  ({ targetInfos } = await c.send("Target.getTargets"));
+  runner = targetInfos.find(t => t.url.includes(`${EXT_ID}/runner.html`));
+}
 if (!runner) {
   const extPage = targetInfos.find(t => t.url.startsWith("chrome-extension://") && !t.url.includes("admccjkmock"));
   if (extPage) {
