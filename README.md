@@ -71,6 +71,13 @@ pause) against a fake `chrome` API.
 - **Image embedding.** SheetJS 0.18.5 community silently ignores worksheet `!images`, so
   `xlsx-image.js` injects the OOXML drawing parts (`xl/media/*`, `xl/drawings/*`, rels and
   content-type overrides) into the generated archive by hand.
+- **Image thumbnails.** The images render in a 120x120 cell but Amazon serves full
+  gallery images (commonly 1500px on the long edge, several hundred KB each), which
+  would otherwise dominate the workbook. `image-fetch.js` downscales every fetched
+  image to fit a 256px box with `createImageBitmap` + `OffscreenCanvas` before caching
+  it, preserving the aspect ratio and flattening transparency onto white. A two-ASIN
+  export drops from 1.62 MB to 58 KB. Images already smaller than the box are left
+  untouched, and if either canvas API is missing the original bytes are used as-is.
 - **Critical reviews.** Reached by splicing the ASIN into
   `/portal/customer-reviews/{ASIN}/...&filterByStar=critical`, then clicking
   `a[data-hook="show-more-button"]` until 30 reviews are collected. The detail page and

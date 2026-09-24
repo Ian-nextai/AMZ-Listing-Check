@@ -34,7 +34,83 @@ export function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-export async function fetchImageAsBase64(url, fetchImpl = fetch) {
+// 图片导出到表格里只占 120x120 px，抓 Amazon 原图（常见单边 1500px+）纯属浪费。
+// 抓取时就地缩放，缓存里存的已是缩略图，导出无需再处理。
+export const IMAGE_THUMBNAIL_MAX_EDGE = 256;
+export const IMAGE_THUMBNAIL_QUALITY = 0.82;
+
+// 等比缩进 maxEdge 的方框里。纯函数，不碰 canvas，可直接单测。
+export function computeThumbnailSize(width, height, maxEdge = IMAGE_THUMBNAIL_MAX_EDGE) {
+  const w = Number(width);
+  const h = Number(height);
+  const edge = Number(maxEdge);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0 || !Number.isFinite(edge) || edge <= 0) {
+    return null;
+  }
+
+  const scale = Math.min(1, edge / Math.max(w, h));
+  return {
+    width: Math.max(1, Math.round(w * scale)),
+    height: Math.max(1, Math.round(h * scale)),
+    scale
+  };
+}
+
+// 在支持 OffscreenCanvas 的环境（Chrome MV3 service worker）里把 oversized 的图
+// 缩成 JPEG 缩略图；任何一步失败都返回 null，由调用方原样使用原图。
+export async function downscaleImageBytes(
+  bytes,
+  { maxEdge = IMAGE_THUMBNAIL_MAX_EDGE, quality = IMAGE_THUMBNAIL_QUALITY } = {}
+) {
+  if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas !== "function") {
+    return null;
+  }
+
+  try {
+    const bitmap = await createImageBitmap(new Blob([bytes]));
+    const size = computeThumbnailSize(bitmap.width, bitmap.height, maxEdge);
+    if (!size) {
+      return null;
+    }
+
+    // 尺寸本来就放得下的图不重新编码，避免无谓的有损转换。
+    if (size.scale === 1) {
+      bitmap.close?.();
+      return null;
+    }
+
+    const canvas = new OffscreenCanvas(size.width, size.height);
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.fillStyle = "#ffffff"; // JPEG 无透明通道，白底兜住带透明的 PNG/WebP
+    context.fillRect(0, 0, size.width, size.height);
+    context.drawImage(bitmap, 0, 0, size.width, size.height);
+    bitmap.close?.();
+
+    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
+    const arrayBuffer = await blob.arrayBuffer();
+    if (!arrayBuffer.byteLength) {
+      return null;
+    }
+
+    return {
+      bytes: new Uint8Array(arrayBuffer),
+      extension: "jpg",
+      width: size.width,
+      height: size.height,
+      byteLength: arrayBuffer.byteLength
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function fetchImageAsBase64(url, fetchImpl = fetch, options = {}) {
   const target = String(url || "").trim();
   if (!/^https?:\/\//i.test(target)) {
     return null;
@@ -59,10 +135,29 @@ export async function fetchImageAsBase64(url, fetchImpl = fetch) {
       return null;
     }
 
-    return {
+    const original = {
       base64: arrayBufferToBase64(buffer),
       extension: pickImageExtension(response.headers?.get?.("content-type"), target),
       byteLength: buffer.byteLength
+    };
+
+    if (options.maxEdge === 0) {
+      return original;
+    }
+
+    const thumbnail = await downscaleImageBytes(new Uint8Array(buffer), options);
+    if (!thumbnail) {
+      return original;
+    }
+
+    return {
+      base64: arrayBufferToBase64(thumbnail.bytes.buffer),
+      extension: thumbnail.extension,
+      byteLength: thumbnail.byteLength,
+      originalByteLength: original.byteLength,
+      width: thumbnail.width,
+      height: thumbnail.height,
+      downscaled: true
     };
   } catch (error) {
     return null;
