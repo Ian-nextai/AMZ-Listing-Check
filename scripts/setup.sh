@@ -45,11 +45,17 @@ for f in cdp.mjs drive.mjs feishu_send_file.py; do
 done
 
 echo "== 5. 飞书凭据 =="
-if [ -f /root/.hermes/.env ] && grep -q "FEISHU_APP_ID" /root/.hermes/.env 2>/dev/null; then
-  ok "FEISHU_APP_ID/SECRET 在 /root/.hermes/.env"
+# 凭据可能在 ~/.hermes/.env，也可能在某个 profile 的 .env 下（多 profile 机器）
+ENV_FILE=""
+for f in "${HERMES_ENV_FILE:-}" "$HOME/.hermes/.env" $HOME/.hermes/profiles/*/.env; do
+  [ -f "$f" ] && grep -q "FEISHU_APP_ID" "$f" 2>/dev/null && ENV_FILE="$f" && break
+done
+if [ -n "$ENV_FILE" ]; then
+  ok "FEISHU_APP_ID/SECRET 在 $ENV_FILE"
 else
   warn "缺飞书凭据 → --feishu 不可用（不影响抓取）"
 fi
+[ -z "${FEISHU_CHAT_ID:-}" ] && warn "未设 FEISHU_CHAT_ID → --feishu 须显式 --feishu-to <chat_id>" || ok "FEISHU_CHAT_ID 已设"
 
 echo "== 6. 网络 =="
 CODE=$(timeout 10 curl -s -o /dev/null -w '%{http_code}' https://www.amazon.com/ 2>/dev/null)
