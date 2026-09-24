@@ -78,6 +78,9 @@ pause) against a fake `chrome` API.
   it, preserving the aspect ratio and flattening transparency onto white. A two-ASIN
   export drops from 1.62 MB to 58 KB. Images already smaller than the box are left
   untouched, and if either canvas API is missing the original bytes are used as-is.
+  The **图片尺寸** popup setting controls the long edge — 128 / 256 / 512 / 1024 px, or
+  **原始尺寸** to keep Amazon's file. Headless runs pass `--max-image-edge N` (0 means
+  no downscaling); when omitted the extension uses whatever the popup last saved.
 - **Critical reviews.** Reached by splicing the ASIN into
   `/portal/customer-reviews/{ASIN}/...&filterByStar=critical`, then clicking
   `a[data-hook="show-more-button"]` until 30 reviews are collected. The detail page and

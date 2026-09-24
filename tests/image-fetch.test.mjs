@@ -6,6 +6,9 @@ import {
   computeThumbnailSize,
   downscaleImageBytes,
   fetchImageAsBase64,
+  IMAGE_MAX_EDGE_LIMIT,
+  IMAGE_THUMBNAIL_MAX_EDGE,
+  normalizeMaxImageEdge,
   pickImageExtension
 } from "../assets/extension/src/core/image-fetch.js";
 
@@ -110,4 +113,29 @@ test("fetchImageAsBase64 keeps the original when maxEdge is 0", async () => {
   );
 
   assert.deepEqual(result, { base64: "AQID", extension: "jpg", byteLength: 3 });
+});
+
+test("normalizeMaxImageEdge falls back to the default for missing values", () => {
+  assert.equal(normalizeMaxImageEdge(undefined), IMAGE_THUMBNAIL_MAX_EDGE);
+  assert.equal(normalizeMaxImageEdge(null), IMAGE_THUMBNAIL_MAX_EDGE);
+  assert.equal(normalizeMaxImageEdge(""), IMAGE_THUMBNAIL_MAX_EDGE);
+  assert.equal(normalizeMaxImageEdge("not-a-number"), IMAGE_THUMBNAIL_MAX_EDGE);
+  assert.equal(normalizeMaxImageEdge(NaN), IMAGE_THUMBNAIL_MAX_EDGE);
+});
+
+test("normalizeMaxImageEdge accepts explicit sizes and rounds them", () => {
+  assert.equal(normalizeMaxImageEdge("128"), 128);
+  assert.equal(normalizeMaxImageEdge(512), 512);
+  assert.equal(normalizeMaxImageEdge(200.6), 201);
+});
+
+test("normalizeMaxImageEdge treats zero and negatives as 'no downscaling'", () => {
+  assert.equal(normalizeMaxImageEdge(0), 0);
+  assert.equal(normalizeMaxImageEdge("0"), 0);
+  assert.equal(normalizeMaxImageEdge(-100), 0);
+});
+
+test("normalizeMaxImageEdge caps absurd sizes", () => {
+  assert.equal(normalizeMaxImageEdge(100000), IMAGE_MAX_EDGE_LIMIT);
+  assert.equal(normalizeMaxImageEdge(IMAGE_MAX_EDGE_LIMIT - 1), IMAGE_MAX_EDGE_LIMIT - 1);
 });

@@ -5,6 +5,7 @@
 #   ./run.sh "ASIN1,ASIN2,..." [选项]
 #     --zip 10010        配送邮编（默认 10010）
 #     --delay 1200       ASIN 间隔 ms（默认 1200）
+#     --max-image-edge N 图片长边上限 px（默认跟随扩展设置；0 = 不压缩）
 #     --with-reviews     差评收集开（默认关！须先登录，见 --check-login/--login）
 #     --retry 1          失败 ASIN 自动补跑次数（默认 1）
 #     --feishu           跑完自动发飞书（文件+摘要）；不加则由 agent 在回复中交付文件
@@ -24,12 +25,14 @@ if [ -z "$ASINS" ] || [[ "$ASINS" == --* ]]; then sed -n '4,19p' "$0"; exit 1; f
 shift
 
 ZIP=10010; DELAY=1200; REVIEWS=""; RETRY=""; FEISHU=""
+MAX_IMAGE_EDGE=""
 FEISHU_TO="${FEISHU_DEFAULT_TO:-}"; ID_TYPE=open_id
 FRESH=""; CHECK_LOGIN=""; LOGIN=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --zip) ZIP="$2"; shift 2;;
     --delay) DELAY="$2"; shift 2;;
+    --max-image-edge) MAX_IMAGE_EDGE="--max-image-edge $2"; shift 2;;
     --with-reviews) REVIEWS="--with-reviews"; shift;;
     --retry) RETRY="--retry $2"; shift 2;;
     --feishu) FEISHU=1; shift;;
@@ -100,7 +103,7 @@ if [ -n "$CHECK_LOGIN" ] || [ -n "$REVIEWS" ]; then
   fi
 fi
 
-node "$SCRIPT_DIR/drive.mjs" "$ASINS" --zip "$ZIP" --delay "$DELAY" $REVIEWS $RETRY --port "$PORT"
+node "$SCRIPT_DIR/drive.mjs" "$ASINS" --zip "$ZIP" --delay "$DELAY" $REVIEWS $RETRY $MAX_IMAGE_EDGE --port "$PORT"
 RC=$?
 
 REPORT=/tmp/amz-last-run.json

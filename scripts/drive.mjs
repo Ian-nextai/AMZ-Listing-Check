@@ -15,13 +15,14 @@ const ASINS = (args.find(a => !a.startsWith("--")) || "").split(",").map(s => s.
 const opt = (name, dflt) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : dflt; };
 const has = (name) => args.includes(`--${name}`);
 const ZIP = opt("zip", "10010");
+const MAX_IMAGE_EDGE = opt("max-image-edge", "");   // 空 = 用扩展默认值
 const DELAY = Number(opt("delay", "1200"));
 const PORT = Number(opt("port", "19222"));
 const TIMEOUT_MIN = Number(opt("timeout", "25"));
 const MAX_RETRY = Number(opt("retry", "1"));
 
 if (!ASINS.length) {
-  console.error("用法: node drive.mjs <ASIN1,...> [--zip N] [--delay N] [--port N] [--with-reviews] [--retry N] [--timeout min]");
+  console.error("用法: node drive.mjs <ASIN1,...> [--zip N] [--delay N] [--port N] [--with-reviews] [--retry N] [--timeout min] [--max-image-edge N]");
   process.exit(1);
 }
 
@@ -85,8 +86,23 @@ const sendToBg = (msg) => c.sendSession(sessionId, "Runtime.evaluate", {
 });
 
 // 跑一轮任务并等到 completed；返回 task 快照
+// 未指定 --max-image-edge 时不带该字段，让扩展用 popup 里用户选的默认值
+function buildStartPayload(asins) {
+  const payload = {
+    type: "start-new-task",
+    asins,
+    checks: CHECKS,
+    zipCode: ZIP,
+    delayMs: DELAY
+  };
+  if (MAX_IMAGE_EDGE !== "") {
+    payload.maxImageEdge = Number(MAX_IMAGE_EDGE);
+  }
+  return payload;
+}
+
 async function runTask(asins, label) {
-  const start = await sendToBg({ type: "start-new-task", asins, checks: CHECKS, zipCode: ZIP, delayMs: DELAY });
+  const start = await sendToBg(buildStartPayload(asins));
   if (!start?.ok) throw new Error(`start-new-task 失败: ${JSON.stringify(start)}`);
   log(`${label}: ${asins.length} ASINs 开始（差评${CHECKS.criticalReviews ? "开" : "关"}）`);
 
@@ -140,6 +156,7 @@ const report = {
   status: "completed",
   zip: ZIP,
   reviewsEnabled: CHECKS.criticalReviews,
+  maxImageEdge: MAX_IMAGE_EDGE === "" ? null : Number(MAX_IMAGE_EDGE),
   asins: ASINS,
   mainXlsx: mainTask.downloadFilename || "",
   retryXlsx: retryTask?.downloadFilename || "",

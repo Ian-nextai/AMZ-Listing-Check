@@ -1,5 +1,9 @@
 import { normalizeAsins, normalizeZipCode } from "./src/core/task-utils.js";
 import { hasAnyCheckSelected, normalizeSelectedChecks } from "./src/core/task-state.js";
+import {
+  IMAGE_THUMBNAIL_MAX_EDGE,
+  normalizeMaxImageEdge
+} from "./src/core/image-fetch.js";
 
 const CHECKBOX_IDS = {
   title: "check-title",
@@ -24,6 +28,7 @@ const dom = {
   asinInput: document.getElementById("asin-input"),
   zipCodeInput: document.getElementById("zip-code-input"),
   delaySelect: document.getElementById("delay-select"),
+  maxImageEdgeSelect: document.getElementById("max-image-edge-select"),
   focusRunnerBtn: document.getElementById("focus-runner-btn"),
   focusWorkerBtn: document.getElementById("focus-worker-btn"),
   startBtn: document.getElementById("start-btn"),
@@ -57,6 +62,7 @@ function bindEvents() {
   dom.asinInput.addEventListener("input", persistSavedSettings);
   dom.zipCodeInput.addEventListener("input", persistSavedSettings);
   dom.delaySelect.addEventListener("change", persistSavedSettings);
+  dom.maxImageEdgeSelect.addEventListener("change", persistSavedSettings);
 
   for (const key of Object.keys(CHECKBOX_IDS)) {
     dom[key].addEventListener("change", persistSavedSettings);
@@ -92,7 +98,8 @@ function bindEvents() {
       asins,
       checks,
       zipCode,
-      delayMs: Number(dom.delaySelect.value) || 1000
+      delayMs: Number(dom.delaySelect.value) || 1000,
+      maxImageEdge: normalizeMaxImageEdge(dom.maxImageEdgeSelect.value)
     });
 
     if (response?.ok === false) {
@@ -162,6 +169,7 @@ async function hydrateSavedSettings() {
     "savedAsins",
     "savedZipCode",
     "savedDelayMs",
+    "savedMaxImageEdge",
     "savedChecks"
   ]);
 
@@ -170,6 +178,13 @@ async function hydrateSavedSettings() {
   }
   if (typeof saved.savedDelayMs === "string" && saved.savedDelayMs) {
     dom.delaySelect.value = saved.savedDelayMs;
+  }
+  // 存的可能是旧版本没有的值，或手工写进 storage 的越界值：统一走 normalize，
+  // 并把归一化结果回填，保证下拉框不会出现无对应项的空选项。
+  const maxImageEdge = normalizeMaxImageEdge(saved.savedMaxImageEdge);
+  dom.maxImageEdgeSelect.value = String(maxImageEdge);
+  if (!dom.maxImageEdgeSelect.value) {
+    dom.maxImageEdgeSelect.value = String(IMAGE_THUMBNAIL_MAX_EDGE);
   }
   dom.zipCodeInput.value = normalizeZipCode(saved.savedZipCode) || "10010";
 
@@ -189,6 +204,7 @@ async function persistSavedSettings() {
     savedAsins: dom.asinInput.value,
     savedZipCode: normalizeZipCode(dom.zipCodeInput.value) || "10010",
     savedDelayMs: dom.delaySelect.value,
+    savedMaxImageEdge: normalizeMaxImageEdge(dom.maxImageEdgeSelect.value),
     savedChecks: getSelectedChecks()
   });
 }

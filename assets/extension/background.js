@@ -15,7 +15,7 @@ import {
   buildWorksheetRows,
   getActiveColumns
 } from "./src/core/export-plan.js";
-import { fetchImageAsBase64 } from "./src/core/image-fetch.js";
+import { fetchImageAsBase64, normalizeMaxImageEdge } from "./src/core/image-fetch.js";
 import { dedupeReviews } from "./src/core/review-dedupe.js";
 import { embedImagesIntoXlsx } from "./src/core/xlsx-image.js";
 import {
@@ -186,6 +186,7 @@ async function handleStartNewTask(message, sendResponse) {
     zipCode,
     zipCodeApplied: false,
     delayMs: Math.max(0, Number(message?.delayMs) || 1000),
+    maxImageEdge: normalizeMaxImageEdge(message?.maxImageEdge),
     executionToken: await beginTaskExecution(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -455,7 +456,7 @@ async function processAsin(task, asin) {
     const extractedChecks = extractAmazonListingChecks(pageData.html, task.selectedChecks);
     validateExtractedChecks(task.selectedChecks, extractedChecks, pageData.html);
 
-    const imageResults = await collectListingImages(task.selectedChecks, extractedChecks);
+    const imageResults = await collectListingImages(task.selectedChecks, extractedChecks, task.maxImageEdge);
     Object.assign(extractedChecks, imageResults);
 
     if (task.selectedChecks.criticalReviews) {
@@ -530,17 +531,17 @@ async function clearContinueShoppingGate() {
   return true;
 }
 
-async function collectListingImages(selectedChecks, extractedChecks) {
+async function collectListingImages(selectedChecks, extractedChecks, maxImageEdge) {
   const result = {};
 
   if (selectedChecks?.imageA) {
-    const downloaded = await fetchListingImage(extractedChecks.imageAUrl);
+    const downloaded = await fetchListingImage(extractedChecks.imageAUrl, maxImageEdge);
     result.imageAData = downloaded;
     result.imageAError = downloaded ? "" : "A图下载失败。";
   }
 
   if (selectedChecks?.imageDetail) {
-    const downloaded = await fetchListingImage(extractedChecks.imageDetailUrl);
+    const downloaded = await fetchListingImage(extractedChecks.imageDetailUrl, maxImageEdge);
     result.imageDetailData = downloaded;
     result.imageDetailError = downloaded ? "" : "详情图下载失败。";
   }
@@ -548,20 +549,20 @@ async function collectListingImages(selectedChecks, extractedChecks) {
   return result;
 }
 
-async function fetchListingImage(url) {
+async function fetchListingImage(url, maxImageEdge) {
   const target = String(url || "").trim();
   if (!target) {
     return null;
   }
 
   if (!imageCache.has(target)) {
-    imageCache.set(target, await fetchImageAsBase64(target));
+    imageCache.set(target, await fetchImageAsBase64(target, undefined, { maxEdge: maxImageEdge }));
   }
 
   return imageCache.get(target);
 }
 
-async function resolveExportImages(results, selectedChecks) {
+async function resolveExportImages(results, selectedChecks, maxImageEdge) {
   const placements = buildImagePlacements(results, selectedChecks);
 
   return Promise.all(
@@ -570,7 +571,7 @@ async function resolveExportImages(results, selectedChecks) {
         return placement;
       }
 
-      const downloaded = await fetchListingImage(placement.url);
+      const downloaded = await fetchListingImage(placement.url, maxImageEdge);
       return downloaded ? { ...placement, base64: downloaded.base64, extension: downloaded.extension } : null;
     })
   ).then((items) => items.filter(Boolean));
@@ -760,7 +761,7 @@ async function exportTaskAsDownload(task) {
   }
 
   const rows = buildWorksheetRows(results, task.selectedChecks);
-  const placements = await resolveExportImages(results, task.selectedChecks);
+  const placements = await resolveExportImages(results, task.selectedChecks, task.maxImageEdge);
   const bytes = createWorkbookBytes(rows, placements, task.selectedChecks);
   const filename = buildExportFilename();
   const downloadId = await downloadBlob(
