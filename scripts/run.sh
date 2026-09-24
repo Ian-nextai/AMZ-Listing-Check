@@ -42,7 +42,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-CHROME=/root/.cache/ms-playwright/chromium-1234/chrome-linux/chrome
+CHROME="${CHROME:-$(ls -d "${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1)}"
 EXT="$SKILL_DIR/assets/extension"
 PROFILE=/root/.hermes/amazon-profile
 PORT=19222
@@ -73,9 +73,18 @@ CHROME_PID=$!
 trap 'kill $CHROME_PID 2>/dev/null || true' EXIT
 
 for i in $(seq 1 30); do
-  curl -s -o /dev/null "http://127.0.0.1:$PORT/json/version" && break
+  # -f 必须有：curl 对 connection refused 也返回 0（无 -f 时 -s 只看自身错误），
+  # 否则这个循环第一次就 break，Chrome 还没起来就直接去连 → drive.mjs 报 cdp timeout
+  curl -sf -o /dev/null "http://127.0.0.1:$PORT/json/version" && break
   sleep 1
 done
+
+# 端口没起来就明确失败，别让 drive.mjs 报一个看不懂的 cdp timeout
+if ! curl -sf -o /dev/null "http://127.0.0.1:$PORT/json/version"; then
+  echo "ERROR: Chromium 未能在 $PORT 上就绪（进程已退出？检查 $PROFILE/SingletonLock 残留）"
+  kill $CHROME_PID 2>/dev/null
+  exit 1
+fi
 
 # 登录态检测（--check-login 显式要 / --with-reviews 隐含要）
 if [ -n "$CHECK_LOGIN" ] || [ -n "$REVIEWS" ]; then
