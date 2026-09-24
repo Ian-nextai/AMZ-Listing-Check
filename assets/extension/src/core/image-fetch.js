@@ -38,6 +38,26 @@ export function arrayBufferToBase64(buffer) {
 // 抓取时就地缩放，缓存里存的已是缩略图，导出无需再处理。
 export const IMAGE_THUMBNAIL_MAX_EDGE = 256;
 export const IMAGE_THUMBNAIL_QUALITY = 0.82;
+// 0 表示不缩放，保留原图。上限防止用户填出离谱的值把内存打爆。
+export const IMAGE_MAX_EDGE_LIMIT = 4096;
+
+export function normalizeMaxImageEdge(value) {
+  if (value === null || value === undefined || value === "") {
+    return IMAGE_THUMBNAIL_MAX_EDGE;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return IMAGE_THUMBNAIL_MAX_EDGE;
+  }
+
+  // 0 是合法的"关闭缩放"，负值无意义。
+  if (parsed <= 0) {
+    return 0;
+  }
+
+  return Math.min(IMAGE_MAX_EDGE_LIMIT, Math.round(parsed));
+}
 
 // 等比缩进 maxEdge 的方框里。纯函数，不碰 canvas，可直接单测。
 export function computeThumbnailSize(width, height, maxEdge = IMAGE_THUMBNAIL_MAX_EDGE) {
@@ -141,11 +161,15 @@ export async function fetchImageAsBase64(url, fetchImpl = fetch, options = {}) {
       byteLength: buffer.byteLength
     };
 
-    if (options.maxEdge === 0) {
+    const maxEdge = normalizeMaxImageEdge(options.maxEdge);
+    if (maxEdge === 0) {
       return original;
     }
 
-    const thumbnail = await downscaleImageBytes(new Uint8Array(buffer), options);
+    const thumbnail = await downscaleImageBytes(new Uint8Array(buffer), {
+      maxEdge,
+      quality: options.quality ?? IMAGE_THUMBNAIL_QUALITY
+    });
     if (!thumbnail) {
       return original;
     }

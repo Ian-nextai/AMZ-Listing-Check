@@ -296,6 +296,20 @@
         </select>
       </div>
 
+      <div style="margin-top:12px;">
+        <label class="field-label" for="max-image-edge-select">图片尺寸</label>
+        <select id="max-image-edge-select">
+          <option value="128">128 px（最小文件）</option>
+          <option value="256" selected>256 px（推荐）</option>
+          <option value="512">512 px（较清晰）</option>
+          <option value="1024">1024 px（高清）</option>
+          <option value="0">原始尺寸（不压缩）</option>
+        </select>
+        <span class="field-label" style="display:block;margin-top:6px;line-height:1.5;">
+          图片在表格中显示为 120 px；缩小尺寸可显著减小导出的 xlsx 体积。
+        </span>
+      </div>
+
       <p class="hint">失败结果会导出为 `failed` 行，并带上错误原因。</p>
       <button id="start-btn" style="margin-top:12px;">开始检查</button>
     </section>
