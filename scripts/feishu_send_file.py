@@ -12,6 +12,8 @@ import uuid
 PATH = sys.argv[1]
 DESC = sys.argv[2] if len(sys.argv) > 2 else "文件"
 RECEIVE_ID = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("FEISHU_CHAT_ID", "")
+# open_id 是应用隔离的（同一用户在不同应用里 open_id 不同，跨应用发消息会报
+# "open_id cross app"），union_id 在同一个租户下唯一，所以私聊优先用 union_id。
 RECEIVE_TYPE = sys.argv[4] if len(sys.argv) > 4 else os.environ.get("FEISHU_ID_TYPE", "chat_id")
 
 # Credentials live wherever this host keeps its Hermes env file: an explicit
