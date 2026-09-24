@@ -13,7 +13,10 @@ bad()  { echo "  ❌ $1"; FAIL=$((FAIL+1)); }
 warn() { echo "  ⚠️  $1"; WARN=$((WARN+1)); }
 
 echo "== 1. Chromium 完整版（旧 headless_shell 不支持扩展，必须是 chrome）=="
-CHROME=/root/.cache/ms-playwright/chromium-1234/chrome-linux/chrome
+# playwright 的 chromium 目录带版本号且布局会变（本机 chromium-1243/chrome-linux64），
+# 不能写死版本：按版本号排序取最新的那份，可用 CHROME / PLAYWRIGHT_BROWSERS_PATH 覆盖
+PW_DIR="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+CHROME="${CHROME:-$(ls -d "$PW_DIR"/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1)}"
 if [ -x "$CHROME" ]; then
   V=$("$CHROME" --headless=new --no-sandbox --version 2>/dev/null | head -1)
   [ -n "$V" ] && ok "$V" || bad "chrome 存在但 --headless=new 起不来（缺库？apt-get install -y libatk-bridge2.0-0）"

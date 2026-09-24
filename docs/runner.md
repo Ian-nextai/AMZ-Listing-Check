@@ -90,7 +90,7 @@ websockify --web /usr/share/novnc 8788 localhost:5900 &
 cloudflared tunnel --url http://127.0.0.1:8788 &       # 输出临时公网 URL
 
 # 完整版 Chrome（非 headless）+ 持久 profile：
-/root/.cache/ms-playwright/chromium-1234/chrome-linux/chrome \
+/root/.cache/ms-playwright/chromium-*/chrome-linux*/chrome \   # 版本号按实际安装的为准
   --no-sandbox --user-data-dir=/root/.hermes/amazon-profile \
   --display=:99 "https://www.amazon.com/ap/signin?openid.return_to=https%3A%2F%2Fwww.amazon.com%2F"
 
