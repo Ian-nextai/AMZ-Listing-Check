@@ -8,6 +8,7 @@
 #     --max-image-edge N 图片长边上限 px（默认跟随扩展设置；0 = 不压缩）
 #     --with-reviews     差评收集开（默认关！须先登录，见 --check-login/--login）
 #     --retry 1          失败 ASIN 自动补跑次数（默认 1）
+#     --chunk 8          每批 ASIN 数（默认 0=不分批）；批间清空扩展图片缓存，省内存
 #     --feishu           跑完自动发飞书（文件+摘要）；不加则由 agent 在回复中交付文件
 #     --feishu-to <id>   接收者（不传则用环境变量 FEISHU_CHAT_ID；发群传 chat_id 并配 --id-type chat_id）
 #     --id-type open_id  receive_id_type（默认 open_id）
@@ -25,7 +26,7 @@ if [ -z "$ASINS" ] || [[ "$ASINS" == --* ]]; then sed -n '4,19p' "$0"; exit 1; f
 shift
 
 ZIP=10010; DELAY=1200; REVIEWS=""; RETRY=""; FEISHU=""
-MAX_IMAGE_EDGE=""
+MAX_IMAGE_EDGE=""; CHUNK=""
 FEISHU_TO="${FEISHU_DEFAULT_TO:-}"; ID_TYPE=open_id
 FRESH=""; CHECK_LOGIN=""; LOGIN=""
 while [ $# -gt 0 ]; do
@@ -33,6 +34,7 @@ while [ $# -gt 0 ]; do
     --zip) ZIP="$2"; shift 2;;
     --delay) DELAY="$2"; shift 2;;
     --max-image-edge) MAX_IMAGE_EDGE="--max-image-edge $2"; shift 2;;
+    --chunk) CHUNK="--chunk $2"; shift 2;;
     --with-reviews) REVIEWS="--with-reviews"; shift;;
     --retry) RETRY="--retry $2"; shift 2;;
     --feishu) FEISHU=1; shift;;
@@ -103,10 +105,15 @@ if [ -n "$CHECK_LOGIN" ] || [ -n "$REVIEWS" ]; then
   fi
 fi
 
-node "$SCRIPT_DIR/drive.mjs" "$ASINS" --zip "$ZIP" --delay "$DELAY" $REVIEWS $RETRY $MAX_IMAGE_EDGE --port "$PORT"
-RC=$?
+DRIVE_LOG=$(mktemp)
+node "$SCRIPT_DIR/drive.mjs" "$ASINS" --zip "$ZIP" --delay "$DELAY" $REVIEWS $RETRY $MAX_IMAGE_EDGE $CHUNK --port "$PORT" 2>&1 | tee "$DRIVE_LOG"
+RC=${PIPESTATUS[0]}
 
-REPORT=/tmp/amz-last-run.json
+# drive.mjs 用 os.tmpdir() 决定报告路径（Windows 上没有 /tmp），从它自己打印的
+# REPORT= 行取，别再写死一份
+REPORT=$(sed -n 's/^REPORT=//p' "$DRIVE_LOG" | tail -1)
+rm -f "$DRIVE_LOG"
+[ -n "$REPORT" ] && [ -f "$REPORT" ] || REPORT=/tmp/amz-last-run.json
 if [ ! -f "$REPORT" ]; then
   echo "链路错误（无 report 产物）"
   [ -n "$FEISHU" ] && python3 "$SCRIPT_DIR/feishu_send_file.py" /dev/null "Amazon Listing Check 链路错误，无产物。ASINs: $ASINS" "$FEISHU_TO" "$ID_TYPE" >/dev/null 2>&1 || true
@@ -122,23 +129,30 @@ print('ZIP=%s' % safe(r.get('zip'), 10))
 print('REVIEWS=%d' % (1 if r.get('reviewsEnabled') else 0))
 print('RETRIED=%d' % r.get('retriedSuccess', 0))
 print('MAIN_XLSX=%s' % safe(r.get('mainXlsx')))
+print('XLSX_LIST="%s"' % ' '.join(r.get('xlsxFiles') or ([r.get('mainXlsx')] if r.get('mainXlsx') else [])))
 print('FAILURES="%s"' % safe('; '.join(r.get('failures') or ['无'])))
 ")"
 
-XLSX="/root/Downloads/${MAIN_XLSX}"
-echo "XLSX=$XLSX"
+DOWNLOADS=/root/Downloads
+echo "XLSX:"
+for name in $XLSX_LIST; do echo "  $DOWNLOADS/$name"; done
 
-if [ -n "$FEISHU" ] && [ -f "$XLSX" ]; then
+if [ -n "$FEISHU" ]; then
   REV_TXT=$([ "$REVIEWS" = 1 ] && echo 开 || echo 关)
   RETRY_TXT=""
   [ "${RETRIED:-0}" -gt 0 ] && RETRY_TXT="（含自动重试成功 ${RETRIED} 个）"
-  python3 "$SCRIPT_DIR/feishu_send_file.py" "$XLSX" \
-    "Amazon Listing Check：${N_OK} 成功 / ${N_FAIL} 失败${RETRY_TXT}（邮编 ${ZIP}，差评收集${REV_TXT}）。
+  SENT=0
+  for name in $XLSX_LIST; do
+    [ -f "$DOWNLOADS/$name" ] || continue
+    python3 "$SCRIPT_DIR/feishu_send_file.py" "$DOWNLOADS/$name" \
+      "Amazon Listing Check：${N_OK} 成功 / ${N_FAIL} 失败${RETRY_TXT}（邮编 ${ZIP}，差评收集${REV_TXT}）。
 失败明细: ${FAILURES}
 完整数据见附件。" \
-    "$FEISHU_TO" "$ID_TYPE" >/dev/null && echo "已发飞书($FEISHU_TO)"
+      "$FEISHU_TO" "$ID_TYPE" >/dev/null && SENT=$((SENT + 1))
+  done
+  [ "$SENT" -gt 0 ] && echo "已发飞书($FEISHU_TO)，$SENT 个文件" || echo "飞书投递失败（无可发文件）"
 else
-  echo "未启用 --feishu → agent 须在回复中直接把 $XLSX 作为文件交付给用户"
+  echo "未启用 --feishu → agent 须在回复中直接把 $DOWNLOADS 下的 xlsx 作为文件交付给用户"
 fi
 
 [ "$RC" -ne 0 ] && exit 1

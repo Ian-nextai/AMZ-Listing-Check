@@ -27,7 +27,16 @@ function installFakeChrome(pageHtml, { zipApplied = true } = {}) {
   globalThis.chrome = {
     storage: {
       local: {
-        get: async (key) => ({ [key]: store[key] }),
+        // 真 API 的 get 接受 string | string[] | null；结果按 ASIN 分键存放后
+        // 水合走的是数组形式。
+        get: async (keys) => {
+          if (keys === null || keys === undefined) return { ...store };
+          const list = Array.isArray(keys) ? keys : [keys];
+          const out = {};
+          for (const key of list) out[key] = store[key];
+          return out;
+        },
+        getKeys: async () => Object.keys(store),
         set: async (obj) => Object.assign(store, obj),
         remove: async (keys) => {
           for (const key of [].concat(keys)) delete store[key];

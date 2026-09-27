@@ -34,7 +34,7 @@ export function buildImageAnchors(images) {
         id: index + 1,
         name: `Image ${index + 1}`,
         extension: normalizeExtension(image.extension || "png"),
-        bytes: image.bytes,
+        bytes: toUint8(image.bytes),
         columnIndex: columnToIndex(match[1]),
         rowIndex: Number(match[2]) - 1,
         width,
@@ -42,6 +42,12 @@ export function buildImageAnchors(images) {
       };
     })
     .filter(Boolean);
+}
+
+// 已经是 Uint8Array 就原样返回（不复制）。fflate 需要 Uint8Array，而 zipSync
+// 只读它，所以这里归一化一次就够了，后续不必再拷贝。
+function toUint8(value) {
+  return value instanceof Uint8Array ? value : new Uint8Array(value || []);
 }
 
 function normalizeImageInput(image) {
@@ -130,10 +136,13 @@ export function embedImagesIntoXlsx(xlsxBytes, images) {
     return xlsxBytes;
   }
 
-  const files = unzipSync(new Uint8Array(xlsxBytes));
+  // unzipSync 与 zipSync 都只读入参，这里不再复制整包
+  const files = unzipSync(toUint8(xlsxBytes));
 
   for (const anchor of anchors) {
-    files[`xl/media/image${anchor.id}.${anchor.extension}`] = new Uint8Array(anchor.bytes);
+    // level 0 = 仅存储：JPEG/PNG 已经是压缩格式，再 deflate 一遍只多烧一次 CPU
+    // 和一份等大的压缩输出缓冲，体积几乎不变
+    files[`xl/media/image${anchor.id}.${anchor.extension}`] = [anchor.bytes, { level: 0 }];
   }
 
   files["xl/drawings/drawing1.xml"] = encode(buildDrawingXml(anchors));
