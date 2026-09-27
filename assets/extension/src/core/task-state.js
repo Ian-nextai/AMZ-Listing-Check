@@ -106,11 +106,16 @@ export function summarizeTask(task) {
   };
 }
 
+// Copies only the three collections that change. A deep clone here would copy
+// every already-processed result on every ASIN, which is quadratic in the batch
+// size and a real memory spike on a long run; the stored result objects are
+// never mutated in place, so sharing them with the previous task is safe.
 function recordTaskResult(task, asin, result) {
-  const nextTask = structuredClone(task);
-  nextTask.resultsByAsin[asin] = result;
-  nextTask.processedAsins = [...nextTask.processedAsins, asin];
-  nextTask.remainingAsins = nextTask.remainingAsins.filter((value) => value !== asin);
-  nextTask.currentAsin = "";
-  return nextTask;
+  return {
+    ...task,
+    resultsByAsin: { ...task.resultsByAsin, [asin]: result },
+    processedAsins: [...task.processedAsins, asin],
+    remainingAsins: task.remainingAsins.filter((value) => value !== asin),
+    currentAsin: ""
+  };
 }

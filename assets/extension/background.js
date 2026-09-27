@@ -1,4 +1,3 @@
-import * as XLSX from "./vendor/xlsx.mjs";
 import { bytesToDataUrl } from "./src/core/binary.js";
 import {
   CRITICAL_REVIEW_LIMIT,
@@ -12,12 +11,17 @@ import {
 import {
   buildExportFilename,
   buildImagePlacements,
-  buildWorksheetRows,
-  getActiveColumns
+  buildWorksheetRows
 } from "./src/core/export-plan.js";
+import { createImageCache, IMAGE_CACHE_MAX_BYTES } from "./src/core/image-cache.js";
 import { fetchImageAsBase64, normalizeMaxImageEdge } from "./src/core/image-fetch.js";
 import { dedupeReviews } from "./src/core/review-dedupe.js";
-import { embedImagesIntoXlsx } from "./src/core/xlsx-image.js";
+import { dropExportPayload, putExportPayload } from "./src/core/export-relay.js";
+// 静态导入而非 import()：MV3 的 service worker 里 import() 会抛「import() is disallowed
+// on ServiceWorkerGlobalScope by the HTML specification」（实测），这条回退路径因此没法
+// 懒加载。代价是 SheetJS 常驻 worker 进程；换来的是几十 MB 的工作簿字节不在跑爬取的
+// 进程里组装。
+import { createWorkbookBytes } from "./src/core/workbook.js";
 import {
   createTask,
   hasAnyCheckSelected,
@@ -36,12 +40,15 @@ import { shouldFocusWorkerTab } from "./src/core/focus-policy.js";
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const RUNNER_PAGE_URL = chrome.runtime.getURL("runner.html");
 const STORAGE_TASK_KEY = "task";
+// 结果按 ASIN 分键存放，而不是全塞在 header 里：单键写法每存一次都要把到目前为
+// 止所有 ASIN 的结果重写一遍，一个 50 ASIN 的任务全程是 O(n²) 字节的序列化。
+const STORAGE_RESULT_PREFIX = "amzResult:";
 const STORAGE_ACTIVE_TASK_TOKEN_KEY = "taskExecutionToken";
+const STORAGE_EXPORT_KEY = "lastExport";
 const HISTORY_LIMIT = 250;
 const KEEPALIVE_INTERVAL_MS = 20000;
 const PAGE_SETTLE_DELAY_MS = 1200;
 const TAB_LOAD_TIMEOUT_MS = 150000;
-const IMAGE_ROW_HEIGHT_POINTS = 95;
 
 let status = "idle";
 let shouldPause = false;
@@ -60,15 +67,22 @@ const CANCELLED_TOKEN_LIMIT = 50;
 let workerTabId = null;
 let runnerTabId = null;
 let creatingOffscreenDocument = null;
+// 最近一次导出的产物信息。运行器靠它确认下载真的走了 blob 路径（而不是退化成
+// data URL），以及产物实际有多大。
+let lastExportInfo = null;
+// 本次执行里已经落盘过的结果 ASIN。结果写入即不可变（persistableResult 恒定把
+// 图片置 null），所以写过就不必再写；executionToken 一变就整体重置。
+let persistedResultAsins = new Set();
+let persistedResultToken = 0;
 
 // Base64 image payloads stay in memory: persisting them would blow the
 // chrome.storage quota on a large batch. Only URLs are saved, and an export
 // after a service-worker restart re-downloads whatever the cache lost.
-const imageCache = new Map();
+const imageCache = createImageCache({ maxBytes: IMAGE_CACHE_MAX_BYTES });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "get-status") {
-    void handleGetStatus(sendResponse);
+    void handleGetStatus(sendResponse, { includeResults: message?.includeResults !== false });
     return true;
   }
 
@@ -98,6 +112,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "discard-task") {
     void handleDiscardTask(sendResponse);
+    return true;
+  }
+
+  if (message?.type === "clear-image-cache") {
+    void handleClearImageCache(sendResponse);
     return true;
   }
 
@@ -141,17 +160,63 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   }
 });
 
-async function handleGetStatus(sendResponse) {
+async function handleGetStatus(sendResponse, { includeResults = true } = {}) {
   await resumeStoredTaskIfNeeded();
-  const task = await loadTaskFromStorage();
+  // 轮询每 3 秒一次，只要 header 里的计数和当前 ASIN。水合会按 ASIN 逐个读存储，
+  // 再把几十份结果正文克隆过 CDP —— 只有收尾那次要得起（includeResults 默认 true）。
+  const task = includeResults ? await loadTaskFromStorage() : await loadTaskHeader();
   const snapshot = buildStatusSnapshot(task);
 
   sendResponse({
     status: snapshot.status,
     progress: snapshot.progress,
     history: snapshot.history,
-    task: snapshot.task
+    task: snapshot.task,
+    memory: describeImageCache(),
+    export: await loadLastExportInfo()
   });
+}
+
+// 导出信息只有观测用途，但 service worker 随时可能被回收，纯内存存的话最后那次
+// 轮询可能正好读到 null —— 那样就没法证明产物真的走了 blob。落一份到存储里。
+async function loadLastExportInfo() {
+  if (lastExportInfo) {
+    return lastExportInfo;
+  }
+
+  try {
+    const stored = await chrome.storage.local.get(STORAGE_EXPORT_KEY);
+    lastExportInfo = stored?.[STORAGE_EXPORT_KEY] || null;
+  } catch (error) {
+    console.debug("Unable to read last export info.", error);
+  }
+
+  return lastExportInfo;
+}
+
+// Exposed so a batched runner can watch the cache between chunks: the byte
+// count is the part of the task that grows with the batch.
+function describeImageCache() {
+  return {
+    imageCacheBytes: imageCache.bytes,
+    imageCacheEntries: imageCache.size,
+    imageCacheMaxBytes: IMAGE_CACHE_MAX_BYTES
+  };
+}
+
+// Batched runs call this between chunks. Draining the cache releases the base64
+// payloads the finished chunk was holding, so the next chunk starts from the
+// same baseline instead of stacking on top of it.
+async function handleClearImageCache(sendResponse) {
+  if (status === "running" || activeRunPromise) {
+    sendResponse({ ok: false, error: "任务运行中，暂不清空图片缓存。", ...describeImageCache() });
+    return;
+  }
+
+  const freedBytes = imageCache.bytes;
+  const freedEntries = imageCache.size;
+  imageCache.clear();
+  sendResponse({ ok: true, freedBytes, freedEntries, ...describeImageCache() });
 }
 
 async function handleStartNewTask(message, sendResponse) {
@@ -173,6 +238,10 @@ async function handleStartNewTask(message, sendResponse) {
   }
 
   const zipCode = normalizeZipCode(message?.zipCode) || "10010";
+
+  // 开局先清掉上一轮的 amzResult:* —— 这里只是覆盖 task 键，并不经过 clearTask，
+  // 留着旧键的话新任务会水合到僵尸结果。
+  await purgeStoredResults();
 
   logHistory = [];
   currentProgress = "正在准备 Amazon listing 检查任务...";
@@ -293,7 +362,9 @@ function isTaskCancelled(task) {
 
 async function handleOffscreenKeepAlivePing(message, sendResponse) {
   const token = Number(message?.executionToken) || 0;
-  const task = await loadTaskFromStorage();
+  // 心跳每 20 秒一次，判断只用得到 header 里的状态和 token —— 别为此把每个
+  // ASIN 的结果正文都读一遍。
+  const task = await loadTaskHeader();
 
   if (!task || task.status !== "running" || token !== Number(task.executionToken || 0)) {
     sendResponse({ ok: true, stop: true });
@@ -306,7 +377,11 @@ async function handleOffscreenKeepAlivePing(message, sendResponse) {
   }
 
   if (status !== "running" && !activeRunPromise) {
-    void startTaskRun(task);
+    // 真正要起运行时才水合：startTaskRun 需要的是完整 task，不是 header。
+    const full = await loadTaskFromStorage();
+    if (full) {
+      void startTaskRun(full);
+    }
   }
 
   sendResponse({ ok: true, stop: false });
@@ -448,13 +523,20 @@ async function processAsin(task, asin) {
     // another page, so the ASIN url is re-asserted before scraping.
     await ensureWorkerOnUrl(url);
 
-    const pageData = await collectPageDataFromWorkerTab();
-    if (detectAmazonRobotCheck(pageData.html)) {
-      throw new Error("遇到 Amazon Robot Check 页面。");
-    }
+    // 页面 HTML 有几 MB，而后面还有图片下载和差评收集两个长 await（差评那步还会
+    // 把标签页导航走再回来）。用块作用域圈住，出块即不可达，别让它挂过整段。
+    let extractedChecks;
+    {
+      const pageData = await collectPageDataFromWorkerTab();
+      const pageHtml = pageData.html;
 
-    const extractedChecks = extractAmazonListingChecks(pageData.html, task.selectedChecks);
-    validateExtractedChecks(task.selectedChecks, extractedChecks, pageData.html);
+      if (detectAmazonRobotCheck(pageHtml)) {
+        throw new Error("遇到 Amazon Robot Check 页面。");
+      }
+
+      extractedChecks = extractAmazonListingChecks(pageHtml, task.selectedChecks);
+      validateExtractedChecks(task.selectedChecks, extractedChecks);
+    }
 
     const imageResults = await collectListingImages(task.selectedChecks, extractedChecks, task.maxImageEdge);
     Object.assign(extractedChecks, imageResults);
@@ -586,13 +668,15 @@ async function collectCriticalReviews(task) {
 
   try {
     const detailHtml = await expandAndReadReviewMedley();
-    const fromDetail = extractCriticalReviews(detailHtml);
+    // 解析一次就够了（原来同一份字符串最多被解析 4 遍），然后就把这几 MB 放掉：
+    // 下面的评论页跳转会让标签页来回导航，没必要为此一直钉着详情页 HTML。
+    const detailReviews = extractCriticalReviews(detailHtml);
 
-    if (fromDetail.length >= CRITICAL_REVIEW_LIMIT) {
-      return { criticalReviews: fromDetail, reviewPageUrl: "", reviewsError: "" };
+    if (detailReviews.length >= CRITICAL_REVIEW_LIMIT) {
+      return { criticalReviews: detailReviews, reviewPageUrl: "", reviewsError: "" };
     }
 
-    const pageResult = await collectReviewsFromReviewPage(asin, detailHtml);
+    const pageResult = await collectReviewsFromReviewPage(asin, detailReviews);
     return pageResult;
   } catch (error) {
     return { criticalReviews: [], reviewPageUrl: "", reviewsError: `差评收集失败：${error.message}` };
@@ -671,10 +755,13 @@ async function expandAndReadReviewMedley(targetCount = CRITICAL_REVIEW_LIMIT) {
   return String(results?.[0]?.result || "");
 }
 
-async function collectReviewsFromReviewPage(asin, detailHtml) {
+// detailReviews 是详情页**已经解析好的数组**，不是 HTML 字符串：调用方解析完就
+// 把几 MB 的字符串放掉了，这里只拿它做三处回退。保持原样传入（不预先去重）——只有
+// 评论页返回空那一处才包 dedupeReviews。
+async function collectReviewsFromReviewPage(asin, detailReviews) {
   const url = buildCriticalReviewsUrl(asin);
   if (!url) {
-    return { criticalReviews: extractCriticalReviews(detailHtml), reviewPageUrl: "", reviewsError: "" };
+    return { criticalReviews: detailReviews, reviewPageUrl: "", reviewsError: "" };
   }
 
   try {
@@ -688,7 +775,7 @@ async function collectReviewsFromReviewPage(asin, detailHtml) {
 
     if (result?.signIn) {
       return {
-        criticalReviews: extractCriticalReviews(detailHtml),
+        criticalReviews: detailReviews,
         reviewPageUrl: url,
         reviewsError: "评论页需要登录 Amazon，已改用详情页评论。"
       };
@@ -700,7 +787,7 @@ async function collectReviewsFromReviewPage(asin, detailHtml) {
     const pageReviews = dedupeReviews(result?.reviews || []);
     const criticalReviews = pageReviews.length
       ? pageReviews
-      : dedupeReviews(extractCriticalReviews(detailHtml));
+      : dedupeReviews(detailReviews);
 
     return {
       criticalReviews: criticalReviews.slice(0, CRITICAL_REVIEW_LIMIT),
@@ -709,7 +796,7 @@ async function collectReviewsFromReviewPage(asin, detailHtml) {
     };
   } catch (error) {
     return {
-      criticalReviews: extractCriticalReviews(detailHtml),
+      criticalReviews: detailReviews,
       reviewPageUrl: url,
       reviewsError: `评论页抓取失败：${error.message}`
     };
@@ -762,49 +849,14 @@ async function exportTaskAsDownload(task) {
 
   const rows = buildWorksheetRows(results, task.selectedChecks);
   const placements = await resolveExportImages(results, task.selectedChecks, task.maxImageEdge);
-  const bytes = createWorkbookBytes(rows, placements, task.selectedChecks);
   const filename = buildExportFilename();
-  const downloadId = await downloadBlob(
-    bytes,
-    filename,
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  );
+  const downloadId = await downloadExport(rows, placements, task.selectedChecks, filename);
 
   task.downloadFilename = filename;
   task.downloadId = downloadId;
   task.updatedAt = Date.now();
   await saveTask(task);
   return { filename, downloadId };
-}
-
-function createWorkbookBytes(rows, imagePlacements, selectedChecks) {
-  const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.aoa_to_sheet(rows);
-  const columns = getActiveColumns(selectedChecks);
-
-  worksheet["!cols"] = columns.map((column) => ({ wch: column.width || 20 }));
-
-  if (imagePlacements.length) {
-    const imageColumnIndexes = columns
-      .map((column, index) => (column.key === "imageA" || column.key === "imageDetail" ? index : -1))
-      .filter((index) => index >= 0);
-
-    worksheet["!rows"] = rows.map((row, rowIndex) =>
-      rowIndex === 0 || !imageColumnIndexes.length ? {} : { hpt: IMAGE_ROW_HEIGHT_POINTS }
-    );
-  }
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Amazon Listing Checks");
-  const buffer = XLSX.write(workbook, {
-    type: "array",
-    bookType: "xlsx"
-  });
-
-  if (!imagePlacements.length) {
-    return new Uint8Array(buffer);
-  }
-
-  return embedImagesIntoXlsx(new Uint8Array(buffer), imagePlacements);
 }
 
 async function pauseTask(task, message) {
@@ -861,8 +913,14 @@ async function resumeStoredTaskIfNeeded() {
     return;
   }
 
+  // 先读 header：轮询走到这里时绝大多数情况是「没在跑」，不该为此水合一次全部结果。
+  const header = await loadTaskHeader();
+  if (!header || header.status !== "running" || isTaskCancelled(header)) {
+    return;
+  }
+
   const task = await loadTaskFromStorage();
-  if (!task || task.status !== "running" || isTaskCancelled(task)) {
+  if (!task) {
     return;
   }
 
@@ -887,33 +945,92 @@ async function saveTask(task) {
     return;
   }
 
-  const runtimeTask = {
-    ...task,
-    resultsByAsin: stripImageData(task?.resultsByAsin),
-    progressText: currentProgress || task.progressText || "",
-    history: logHistory
-  };
-  activeTaskRef = runtimeTask;
-  await chrome.storage.local.set({ [STORAGE_TASK_KEY]: runtimeTask });
-}
-
-function stripImageData(resultsByAsin) {
-  const next = {};
-  for (const [asin, result] of Object.entries(resultsByAsin || {})) {
-    next[asin] = { ...result, imageAData: null, imageDetailData: null };
+  if (persistedResultToken !== token) {
+    persistedResultAsins = new Set();
+    persistedResultToken = token;
   }
-  return next;
+
+  const header = buildTaskHeader(task);
+  activeTaskRef = header;
+
+  const writes = { [STORAGE_TASK_KEY]: header };
+  for (const [asin, result] of Object.entries(task?.resultsByAsin || {})) {
+    if (persistedResultAsins.has(asin)) {
+      continue;
+    }
+    writes[STORAGE_RESULT_PREFIX + asin] = persistableResult(result);
+    persistedResultAsins.add(asin);
+  }
+
+  await chrome.storage.local.set(writes);
 }
 
-async function loadTaskFromStorage() {
+// header 只带进度和 ASIN 列表，不含任何结果正文——它是每个 ASIN 都会被重写的
+// 那一份，必须保持小。
+function buildTaskHeader(task) {
+  const header = { ...task };
+  delete header.resultsByAsin;
+  header.progressText = currentProgress || task?.progressText || "";
+  header.history = logHistory;
+  return header;
+}
+
+// Base64 image payloads stay out of storage entirely: persisting them would blow
+// the quota on a large batch, and an export after a worker restart re-downloads
+// whatever the in-memory cache lost.
+function persistableResult(result) {
+  return { ...result, imageAData: null, imageDetailData: null };
+}
+
+async function loadTaskHeader() {
   const stored = await chrome.storage.local.get(STORAGE_TASK_KEY);
   return stored?.[STORAGE_TASK_KEY] || null;
+}
+
+// 读取方看到的仍是完整的 task（含 resultsByAsin），所以水合放在这一个边界上即可。
+async function loadTaskFromStorage() {
+  const header = await loadTaskHeader();
+  if (!header) {
+    return null;
+  }
+
+  const asins = Array.isArray(header.processedAsins) ? header.processedAsins : [];
+  const resultsByAsin = {};
+  if (asins.length) {
+    const keys = asins.map((asin) => STORAGE_RESULT_PREFIX + asin);
+    const stored = await chrome.storage.local.get(keys);
+    keys.forEach((key, index) => {
+      if (stored?.[key]) {
+        resultsByAsin[asins[index]] = stored[key];
+      }
+    });
+  }
+
+  return { ...header, resultsByAsin };
+}
+
+// 结果改成前缀键存放后，新任务开局和任务作废都必须把上一轮的前缀键清掉，否则
+// 上一轮的结果会被水合进新任务。
+async function purgeStoredResults() {
+  persistedResultAsins = new Set();
+  persistedResultToken = 0;
+
+  // getKeys()（Chrome 130+）只回键名。老版本退回 get(null)，那会把几 MB 的结果
+  // 正文一起读进来——只在开局和作废时各发生一次，可以接受。
+  const keys = chrome.storage.local.getKeys
+    ? await chrome.storage.local.getKeys()
+    : Object.keys((await chrome.storage.local.get(null)) || {});
+  const stale = keys.filter((key) => key.startsWith(STORAGE_RESULT_PREFIX));
+  if (stale.length) {
+    await chrome.storage.local.remove(stale);
+  }
 }
 
 async function clearTask() {
   // Abandon whatever is running: bumping the run id makes the in-flight loop
   // bail at its next checkpoint instead of writing the old task back.
-  const runningTask = activeTaskRef || (await loadTaskFromStorage());
+  // 只要 executionToken 这一个字段，读 header 就够了。
+  const runningTask = activeTaskRef || (await loadTaskHeader());
   const token = Number(runningTask?.executionToken || 0);
   if (token) {
     cancelledExecutionTokens.add(token);
@@ -932,6 +1049,7 @@ async function clearTask() {
   logHistory = [];
   activeTaskRef = null;
   await chrome.storage.local.remove([STORAGE_TASK_KEY, STORAGE_ACTIVE_TASK_TOKEN_KEY]);
+  await purgeStoredResults();
   await stopTaskKeepAlive();
 }
 
@@ -1298,32 +1416,73 @@ async function stopTaskKeepAlive() {
   }
 }
 
-async function downloadBlob(bytes, filename, mimeType) {
-  const blobUrl = await tryCreateBlobUrl(bytes, mimeType);
-  const url = blobUrl || bytesToDataUrl(bytes, mimeType);
+const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+// The workbook is built in the offscreen document, not here. Bytes cannot cross
+// extension contexts — runtime messaging is JSON, so a Uint8Array arrives as
+// {"0":..,"1":..} and only the base64 form survives, which costs 1.33x the
+// workbook as a string in the worker that is also running the crawl. The
+// workbook's *inputs* are JSON-safe (rows plus base64 images), so the offscreen
+// document builds it and hands back a blob url the downloads API can stream.
+//
+// Those inputs travel through Cache Storage rather than the message itself: a
+// message is capped at 64MiB (measured), and the base64 image payload is the same
+// order of magnitude as the image cache limit, so a large batch with big images
+// would hit it. Only the relay key crosses. If the offscreen build is unavailable
+// the worker still builds locally and downloads a data url, which is slower but
+// always works.
+async function downloadExport(rows, placements, selectedChecks, filename) {
+  let blobUrl = "";
+  let bytes = 0;
+
+  try {
+    await setupOffscreenDocument(OFFSCREEN_DOCUMENT_PATH);
+    const payloadKey = await putExportPayload({ rows, placements, selectedChecks });
+    try {
+      const response = await chrome.runtime.sendMessage({
+        target: "offscreen",
+        type: "create-workbook-blob-url",
+        payloadKey,
+        mimeType: XLSX_MIME_TYPE
+      });
+
+      if (response?.ok) {
+        blobUrl = response.url;
+        bytes = Number(response.bytes || 0);
+      }
+    } finally {
+      await dropExportPayload(payloadKey);
+    }
+  } catch (error) {
+    console.debug("Offscreen workbook build failed, building locally.", error);
+  }
+
+  if (!blobUrl) {
+    const localBytes = createWorkbookBytes(rows, placements, selectedChecks);
+    bytes = localBytes.byteLength;
+    return downloadUrl(bytesToDataUrl(localBytes, XLSX_MIME_TYPE), bytes, "dataurl", filename);
+  }
+
+  return downloadUrl(blobUrl, bytes, "blob", filename);
+}
+
+function downloadUrl(url, bytes, downloadPath, filename) {
+  lastExportInfo = {
+    bytes,
+    downloadPath,
+    filename,
+    at: Date.now()
+  };
+
+  void chrome.storage.local
+    .set({ [STORAGE_EXPORT_KEY]: lastExportInfo })
+    .catch((error) => console.debug("Unable to persist export info.", error));
 
   return chrome.downloads.download({
     url,
     filename,
     saveAs: false
   });
-}
-
-async function tryCreateBlobUrl(bytes, mimeType) {
-  try {
-    await setupOffscreenDocument(OFFSCREEN_DOCUMENT_PATH);
-    const response = await chrome.runtime.sendMessage({
-      target: "offscreen",
-      type: "create-blob-url",
-      base64: bytesToDataUrl(bytes, mimeType).split(",")[1] || "",
-      mimeType
-    });
-
-    return response?.ok ? response.url : "";
-  } catch (error) {
-    console.debug("Unable to create blob url, falling back to data url.", error);
-    return "";
-  }
 }
 
 function sleep(delayMs) {
@@ -1341,7 +1500,7 @@ async function sleepWithPauseChecks(delayMs) {
   return false;
 }
 
-function validateExtractedChecks(selectedChecks, extractedChecks, html) {
+function validateExtractedChecks(selectedChecks, extractedChecks) {
   // Only the title is required. Books and other digital listings render no
   // department subnav at all, so an absent category is missing data, not a
   // failure — it is reported as a note and the row still exports.

@@ -1,3 +1,6 @@
+import { createWorkbookBytes } from "./src/core/workbook.js";
+import { readExportPayload } from "./src/core/export-relay.js";
+
 const MIN_INTERVAL_MS = 10000;
 const BLOB_URL_TTL_MS = 60000;
 
@@ -24,8 +27,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === "create-blob-url") {
-    sendResponse(createBlobUrl(message));
+  if (message.type === "create-workbook-blob-url") {
+    void createWorkbookBlobUrl(message).then(sendResponse);
     return true;
   }
 
@@ -34,17 +37,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Large workbooks blow past the practical data: URL length, so the bytes are
 // handed to a blob object URL that the downloads API can stream instead.
-function createBlobUrl(message) {
+//
+// The workbook is assembled here rather than in the service worker because
+// extension messaging is JSON, not structured clone: raw bytes cannot cross
+// contexts. Only the *inputs* are JSON-safe, so the worker puts rows plus
+// base64 image placements in Cache Storage (messaging also has a size cap, and
+// the image payload is the same order of magnitude as it) and sends just the
+// key — that keeps the 1.33x base64 of a multi-MB workbook out of the process
+// running the crawl.
+async function createWorkbookBlobUrl(message) {
   try {
-    const base64 = String(message?.base64 || "").replace(/^data:[^;]+;base64,/, "");
-    if (!base64) {
-      return { ok: false, error: "缺少文件内容。" };
+    const payload = await readExportPayload(message?.payloadKey);
+    if (!payload) {
+      return { ok: false, error: "找不到导出载荷。" };
     }
 
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
+    const bytes = createWorkbookBytes(
+      payload.rows || [],
+      payload.placements || [],
+      payload.selectedChecks || {}
+    );
+
+    if (!bytes || !bytes.length) {
+      return { ok: false, error: "生成的工作簿为空。" };
     }
 
     const blob = new Blob([bytes], { type: message?.mimeType || "application/octet-stream" });
@@ -52,7 +67,7 @@ function createBlobUrl(message) {
     activeBlobUrls.add(url);
     setTimeout(() => releaseBlobUrl(url), BLOB_URL_TTL_MS);
 
-    return { ok: true, url };
+    return { ok: true, url, bytes: bytes.length };
   } catch (error) {
     return { ok: false, error: error.message };
   }

@@ -54,6 +54,7 @@ assets/extension/
 │   ├── export-plan.js         # column layout and row/cell shaping
 │   ├── task-state.js          # task record shape and transitions
 │   ├── review-dedupe.js       # collapse the same review scraped from two pages
+│   ├── image-cache.js         # bounded FIFO cache for fetched images (memory cap)
 │   ├── image-fetch.js         # download images as base64
 │   ├── xlsx-image.js          # inject image parts into the generated XLSX
 │   ├── task-utils.js          # ASIN / zip normalisation
@@ -81,6 +82,13 @@ pause) against a fake `chrome` API.
   The **图片尺寸** popup setting controls the long edge — 128 / 256 / 512 / 1024 px, or
   **原始尺寸** to keep Amazon's file. Headless runs pass `--max-image-edge N` (0 means
   no downscaling); when omitted the extension uses whatever the popup last saved.
+- **Bounded image cache.** Fetched images are cached by URL so a re-export reuses them
+  instead of re-downloading. At 1024px or 原始尺寸 each payload is hundreds of KB, so an
+  unbounded cache is what actually kills a low-memory device on a 50-ASIN batch.
+  `image-cache.js` caps it at 64 MB and evicts in insertion order (FIFO), never dropping
+  the entry just written; failed downloads stay as zero-cost negative entries so exports
+  don't retry them. The runner drains it between chunks via the `clear-image-cache`
+  message (`--chunk N`); `get-status` reports the current bytes for the same purpose.
 - **Critical reviews.** Reached by splicing the ASIN into
   `/portal/customer-reviews/{ASIN}/...&filterByStar=critical`, then clicking
   `a[data-hook="show-more-button"]` until 30 reviews are collected. The detail page and
@@ -116,10 +124,27 @@ Run this extension in headless Chromium on a server — no manual browser clicki
 See **[docs/runner.md](docs/runner.md)** for the full pipeline:
 
 ```
-./scripts/setup.sh                                   # env check & auto-install
+./scripts/setup.sh                                   # env check & auto-install (Linux)
 ./scripts/run.sh "B0GY48WL28,B0GY49QL6C"             # one-shot: Chrome+CRX → xlsx
 ./scripts/run.sh "B0XXXXXXX" --with-reviews --feishu # login-gated reviews + delivery
 ```
+
+On Windows use the native PowerShell entry point instead — it drives your installed
+Microsoft Edge, so nothing has to be downloaded:
+
+```powershell
+.\scripts\run.ps1 "B0GY48WL28,B0GY49QL6C"
+.\scripts\run.ps1 "B0XXXXXXX" -WithReviews -Chunk 8
+```
+
+It picks Edge first because **branded Google Chrome has refused `--load-extension`
+since version 137** — it ignores the flag without failing, leaving the extension
+silently unloaded. (Chromium, Edge, and Chrome for Testing all still allow it; see
+[docs/runner.md](docs/runner.md#为什么不用-google-chrome).)
+
+`--chunk N` splits the batch into groups of N, exporting each to its own workbook and
+draining the extension's image cache between groups — use it when a large batch runs a
+low-memory machine out of memory.
 
 Runner includes a zero-dependency CDP driver (`drive.mjs`/`cdp.mjs`), Amazon login-state
 detection (`check-login.mjs`), auto-retry for flaky ASINs, and an optional Feishu delivery
