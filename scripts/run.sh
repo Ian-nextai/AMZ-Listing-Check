@@ -27,7 +27,7 @@ shift
 
 ZIP=10010; DELAY=1200; REVIEWS=""; RETRY=""; FEISHU=""
 MAX_IMAGE_EDGE=""; CHUNK=""
-FEISHU_TO="${FEISHU_DEFAULT_TO:-ou_c9d9e0dc295dd8f2d0128ee049faadb8}"; ID_TYPE=open_id
+FEISHU_TO="${FEISHU_DEFAULT_TO:-}"; ID_TYPE=open_id
 FRESH=""; CHECK_LOGIN=""; LOGIN=""
 while [ $# -gt 0 ]; do
   case "$1" in
