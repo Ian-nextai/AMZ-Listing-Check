@@ -19,6 +19,7 @@ scripts/                一键运行栈（零 npm 依赖）
   drive.mjs             扩展驱动器（经 runner.html 消息路由控制 SW，含自动重试）
   check-login.mjs       Amazon 登录态检测
   check-xlsx-header.mjs 产物守卫：校验导出表头是否含本次启用的列
+  proxy.pac             图片 CDN 定向代理规则（只把 *.media-amazon.com 交给本地代理）
   run.sh                一条龙入口：Chrome→扩展→抓取→xlsx→交付
   setup.sh              环境自检/安装（幂等；--check 只诊断）
   feishu_send_file.py   飞书上传+发送（可选投递，ID 走环境变量）
@@ -98,6 +99,7 @@ python3 -c "import openpyxl; ws=openpyxl.load_workbook('/root/Downloads/<文件>
 13. **改了扩展代码却导出旧列（最隐蔽的坑，曾静默丢三列）**：任务实际跑在 MV3 Service Worker 里，而 SW 的**模块图**被 profile 缓存；只重启浏览器、甚至 bump manifest version 都不够（扩展页面 runner.html 读到的是新文件，SW 跑的是旧模块）。症状是任务全部 success、xlsx 却少列。处置：`run.sh` 启动前 `rm -rf "$PROFILE/Default/Service Worker"`（只删该目录，cookie 在 Default/Cookies 不受影响）。**别用「读已加载扩展的 manifest version」做校验**——manifest 每次启动都新读，测不出旧模块，会误报。
 14. **产物守卫**：`run.sh` 跑完用 `check-xlsx-header.mjs` 断言表头含本次启用的列（失败即 exit 1），直接校验产物而非相信运行过程。注意 vendor/xlsx.mjs 是 SheetJS **浏览器构建**，`readFile()` 是抛 "Cannot access file" 的桩函数，必须用 `node:fs` 读字节再 `XLSX.read(buf,{type:'array'})`。
 15. `find /` 全盘搜索在这台机器上会跑到超时（Android/Termux 宿主），排查文件用定向 `ls`/`grep`；`ls | head` 会截断下载目录列表，误判"文件没生成"。
+16. **A图/详情图 随机缺图（不是解析器问题，是网络）**：直连 `m.media-amazon.com` 被 TLS 层 RST（`curl` exit 35，浏览器 `fetch` 报 `Failed to fetch`），`www.amazon.com` 直连正常。扩展把下载失败静默吞掉，只在结果里留 `imageAError:"A图下载失败。"`，症状是「任务全 success、列存在、个别行图空」。run.sh 已用 PAC 只把 `*.media-amazon.com` 交给本地代理（`--image-proxy` 换地址 / `--no-image-proxy` 关闭），商品页仍直连以保持登录出口 IP。**PAC 必须经 HTTP 提供**（`--proxy-pac-url=file://` 被 Chrome 静默忽略，实测无效）。诊断顺序：先用 curl 直连+代理各打一次该 CDN 拿 HTTP 码，别再猜解析器；表头/列数量用 `check-xlsx-header.mjs` 核，图片落点看 `xl/drawings/drawing1.xml` 里 `<col>/<row>`（0 基，col 14=A图、15=详情图）。逐 ASIN 原始结果（含 `imageAUrl`/`imageAError`）在 chrome.storage 的 `amzResult:<ASIN>` 键——**不是** `task.resultsByAsin`，后者导出后会被清空。
 
 ## 扩展单独人工使用（不跑无头链路时）
 

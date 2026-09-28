@@ -15,6 +15,8 @@
 #     --fresh-profile    删除持久 profile 冷启动（正常情况不要用；邮编/登录态会丢）
 #     --check-login      只检测登录态后退出（输出 JSON：loggedIn/greeting）
 #     --login            打印无头环境的人工登录指引后退出
+#     --image-proxy hp:port 图片 CDN 代理地址（默认 127.0.0.1:7890；仅 *.media-amazon.com 走它）
+#     --no-image-proxy   关掉图片代理，图片全走直连（CDN 被墙时会缺 A图/详情图）
 #
 # 退出码: 0=至少1个ASIN成功  1=链路错误  2=全部ASIN失败  3=差评模式但未登录
 set -u
@@ -28,7 +30,8 @@ shift
 ZIP=10010; DELAY=1200; REVIEWS=""; RETRY=""; FEISHU=""
 MAX_IMAGE_EDGE=""; CHUNK=""
 FEISHU_TO="${FEISHU_DEFAULT_TO:-}"; ID_TYPE=open_id
-FRESH=""; CHECK_LOGIN=""; LOGIN=""
+FRESH=""; CHECK_LOGIN=""; LOGIN=""; NO_IMAGES=""
+IMAGE_PROXY="${IMAGE_PROXY:-127.0.0.1:7890}"; NO_IMAGE_PROXY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --zip) ZIP="$2"; shift 2;;
@@ -44,6 +47,8 @@ while [ $# -gt 0 ]; do
     --fresh-profile) FRESH=1; shift;;
     --check-login) CHECK_LOGIN=1; shift;;
     --login) LOGIN=1; shift;;
+    --image-proxy) IMAGE_PROXY="$2"; shift 2;;
+    --no-image-proxy) NO_IMAGE_PROXY=1; shift;;
     *) echo "未知选项: $1"; exit 1;;
   esac
 done
@@ -97,6 +102,37 @@ mkdir -p "$PROFILE"
 # 只删 Service Worker 目录：cookie 与登录态在 Default/Cookies，不受影响。
 rm -rf "$PROFILE/Default/Service Worker"
 
+# 图片 CDN 定向代理（规则见 scripts/proxy.pac）。
+# 直连 m.media-amazon.com 会被 TLS 层重置（curl exit 35 / HTTP=000），
+# 症状是任务全 success、A图/详情图 随机缺图，结果里只留 imageAError="A图下载失败。"。
+# 只给 *.media-amazon.com 套代理，www.amazon.com 保持直连（登录会话出口 IP 不变）。
+# 注意 PAC 必须经 HTTP 提供：--proxy-pac-url=file:// 实测被 Chrome 静默忽略。
+PAC_PID=""; PAC_ARG=""; PAC_DIR=""
+if [ -z "$NO_IMAGE_PROXY" ] && [ -z "${NO_IMAGES:-}" ]; then
+  # 用真实目标探测：返回任何 HTTP 码都算通路，000 才是真不通。
+  PROXY_CODE=$(curl -x "http://$IMAGE_PROXY" -s -o /dev/null -w '%{http_code}' --max-time 8 \
+    "https://m.media-amazon.com/images/" 2>/dev/null || echo 000)
+  if [ "$PROXY_CODE" != "000" ]; then
+    PAC_DIR=$(mktemp -d)
+    sed "s|__IMAGE_PROXY__|$IMAGE_PROXY|" "$SCRIPT_DIR/proxy.pac" > "$PAC_DIR/proxy.pac"
+    PAC_PORT=""
+    for p in 8899 8900 8901 8902 8903; do
+      if ! curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$p/" 2>/dev/null; then PAC_PORT=$p; break; fi
+    done
+    [ -n "$PAC_PORT" ] || { echo "ERROR: 8899-8903 都被占用，无法提供 PAC"; exit 1; }
+    ( cd "$PAC_DIR" && exec python3 -m http.server "$PAC_PORT" --bind 127.0.0.1 ) >/dev/null 2>&1 &
+    PAC_PID=$!
+    for i in $(seq 1 20); do
+      curl -sf -o /dev/null "http://127.0.0.1:$PAC_PORT/proxy.pac" && break
+      sleep 0.5
+    done
+    PAC_ARG="--proxy-pac-url=http://127.0.0.1:$PAC_PORT/proxy.pac"
+    echo "图片代理: 开（*.media-amazon.com → $IMAGE_PROXY；PAC http://127.0.0.1:$PAC_PORT/proxy.pac）"
+  else
+    echo "图片代理: 关（$IMAGE_PROXY 取不到图，图片走直连）——若 CDN 被墙，A图/详情图 会缺"
+  fi
+fi
+
 # 端口必须先真正关闭：若上一轮 Chrome 没死透，新实例会因 profile 锁起不来，
 # 而端口探测仍会连上那个旧实例——它带着旧扩展跑完整批任务，静默产出错误列。
 # 这种「结果看起来正常但是旧的」比直接报错危险得多，所以这里等到端口关闭为止。
@@ -119,12 +155,13 @@ fi
   --user-data-dir="$PROFILE" \
   --disable-features=glic \
   --load-extension="$EXT" \
+  $PAC_ARG \
   --remote-debugging-port=$PORT \
   about:blank >/dev/null 2>&1 &
 CHROME_PID=$!
 echo "$CHROME_PID" > "$PORT_PID_FILE"
-# trap 也按 PID 杀，不走 pkill（同上：模式匹配会误伤调用方 shell）
-trap 'kill "$CHROME_PID" 2>/dev/null || true; rm -f "$PORT_PID_FILE"' EXIT
+# trap 也按 PID 杀，不走 pkill（同上：模式匹配会误伤调用方 shell）；顺带回收 PAC 服务
+trap 'kill "$CHROME_PID" 2>/dev/null || true; [ -n "${PAC_PID:-}" ] && kill "$PAC_PID" 2>/dev/null || true; rm -f "$PORT_PID_FILE"; [ -n "${PAC_DIR:-}" ] && rm -rf "$PAC_DIR" || true' EXIT
 
 for i in $(seq 1 30); do
   # -f 必须有：curl 对 connection refused 也返回 0（无 -f 时 -s 只看自身错误），
