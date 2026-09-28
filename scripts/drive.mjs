@@ -36,6 +36,7 @@ if (!ASINS.length) {
 
 const CHECKS = {
   title: true, titleHighlight: true, rating: true, bulletPoints: true,
+  price: true, coupon: true, discount: true,
   imageA: !NO_IMAGES, imageDetail: !NO_IMAGES, category: true, addToCart: true,
   seller: true,
   criticalReviews: has("with-reviews"),
@@ -171,6 +172,7 @@ const row = (r) => ({
   asin: r.asin, status: r.status,
   title: (r.title || "").slice(0, 60),
   rating: r.ratingValue || "", reviews: r.ratingCount || "",
+  price: r.price || "", coupon: r.coupon || "", discount: r.discount || "",
   seller: r.sellerName || "", stock: r.stockStatus || ""
 });
 

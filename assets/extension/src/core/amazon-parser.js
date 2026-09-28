@@ -354,6 +354,9 @@ export function extractAmazonListingChecks(html, selectedChecks) {
     titleHighlight: selectedChecks?.titleHighlight ? extractTitleHighlight(html) : null,
     ratingValue: selectedChecks?.rating ? extractRatingValue(html) : null,
     ratingCount: selectedChecks?.rating ? extractRatingCount(html) : null,
+    price: selectedChecks?.price ? extractPrice(html) : null,
+    coupon: selectedChecks?.coupon ? extractCoupon(html) : null,
+    discount: selectedChecks?.discount ? extractDiscount(html) : null,
     bulletPoints: selectedChecks?.bulletPoints ? bullets : null,
     imageAUrl: selectedChecks?.imageA ? galleryImages[1] || galleryImages[0] || "" : null,
     imageDetailUrl: selectedChecks?.imageDetail ? detailImages[0] || "" : null,
@@ -565,6 +568,293 @@ function readOfferFeature(text, featureName) {
   }
 
   return value;
+}
+
+// ---------------------------------------------------------------------------
+// Price / discount / coupon
+//
+// All three live in the price block. Amazon renders the same value twice — a
+// screen-reader `.a-offscreen` span and the visible markup — and leaves the
+// offscreen copy blank on some page loads, so the visible pieces are composed
+// as a fallback. Values arrive as nested spans, which is why the block is read
+// with a balanced-tag walker rather than a fixed-width window.
+// ---------------------------------------------------------------------------
+
+const PRICE_SECTION_IDS = [
+  "corePriceDisplay_desktop_feature_div",
+  "corePrice_feature_div",
+  "corePriceDisplay_mobile_feature_div",
+  "corePrice_desktop"
+];
+
+const COUPON_SECTION_IDS = [
+  "promoPriceBlockMessage_feature_div",
+  "promoPriceBlockMessage",
+  "couponFeature",
+  "couponBadge_feature_div",
+  "applicablePromotionList_feature_div"
+];
+
+function readFirstSection(html, elementIds) {
+  for (const elementId of elementIds) {
+    const section = readSection(html, elementId);
+    if (section) {
+      return section;
+    }
+  }
+
+  return "";
+}
+
+// Current buy-box price, e.g. "$49.99". A struck-through reference price is
+// never returned: the buy-box value is read from its own wrapper, and the
+// reference price lives in `.basisPrice`, outside it.
+export function extractPrice(html) {
+  const section = stripNonTextNodes(readFirstSection(String(html || ""), PRICE_SECTION_IDS));
+  if (!section) {
+    return "";
+  }
+
+  const payBlock =
+    readBalancedByClass(section, "span", "priceToPay") ||
+    readBalancedByClass(section, "span", "apexPriceToPay");
+  const payPrice = readPriceFromBlock(payBlock);
+  if (payPrice) {
+    return payPrice;
+  }
+
+  // Older layouts have no buy-box wrapper: the first price in the block that is
+  // not the struck-through reference is the one to pay.
+  for (const match of section.matchAll(/<span[^>]*class="([^"]*\ba-price\b[^"]*)"[^>]*>/gi)) {
+    if (/a-text-price|basisPrice|apex-basisprice-value/i.test(match[1])) {
+      continue;
+    }
+
+    const candidate = readPriceFromBlock(
+      sliceBalancedTag(section, match.index + match[0].length, "span")
+    );
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return "";
+}
+
+function readPriceFromBlock(block) {
+  if (!block) {
+    return "";
+  }
+
+  const offscreen = collapseWhitespace(
+    normalizeText(stripTags(decodeHtml(readFirstMatch(block, /<span class="a-offscreen">([^<]*)<\/span>/i))))
+  );
+  if (offscreen) {
+    return offscreen;
+  }
+
+  // Blank offscreen copy: rebuild from the visible symbol / whole / fraction.
+  const symbol =
+    collapseWhitespace(normalizeText(stripTags(decodeHtml(readFirstMatch(block, /class="a-price-symbol"[^>]*>([^<]*)</i))))) ||
+    "$";
+  const whole = collapseWhitespace(
+    normalizeText(stripTags(decodeHtml(readFirstMatch(block, /class="a-price-whole"[^>]*>([\s\S]*?)<\/span>/i))))
+  );
+  const fraction = collapseWhitespace(
+    normalizeText(stripTags(decodeHtml(readFirstMatch(block, /class="a-price-fraction"[^>]*>([^<]*)</i))))
+  );
+
+  if (!whole) {
+    return "";
+  }
+
+  // `a-price-whole` normally carries its own decimal span ("49."), but not on
+  // every layout, so the separator is only added when it is missing.
+  const separator = whole.endsWith(".") || !fraction ? "" : ".";
+  return `${symbol}${whole}${separator}${fraction}`;
+}
+
+// Savings badge next to a reference price, e.g. "-9% (Typical price: $54.99)".
+// Amazon writes a bare "-" inside a hidden container when a listing has no
+// discount; that is not a discount and yields an empty cell.
+export function extractDiscount(html) {
+  const section = stripNonTextNodes(readFirstSection(String(html || ""), PRICE_SECTION_IDS));
+  if (!section) {
+    return "";
+  }
+
+  const percent = collapseWhitespace(
+    normalizeText(
+      stripTags(
+        decodeHtml(
+          readBalancedByClass(section, "span", "savingsPercentage") ||
+            readBalancedByClass(section, "span", "savingPriceOverride")
+        )
+      )
+    )
+  );
+  const hasPercent = /^-\s*\d+(?:\.\d+)?%$/.test(percent);
+
+  const basisBlock = readBalancedByClass(section, "span", "basisPrice");
+  const basisLabel = normalizeText(
+    stripTags(decodeHtml(readBalancedByClass(basisBlock, "span", "apex-basisprice-label")))
+  );
+  const basisValue = collapseWhitespace(
+    normalizeText(stripTags(decodeHtml(readFirstMatch(basisBlock, /<span class="a-offscreen">([^<]*)<\/span>/i))))
+  );
+
+  const dealBadge = normalizeText(
+    stripTags(
+      decodeHtml(
+        readBalancedByPrefix(section, "span", "dealBadge") ||
+          readBalancedByClass(section, "div", "dealBadge") ||
+          readBalancedByClass(section, "span", "dealBadge")
+      )
+    )
+  );
+
+  if (!hasPercent && !dealBadge) {
+    return "";
+  }
+
+  const parts = [];
+  if (dealBadge) {
+    parts.push(dealBadge);
+  }
+
+  if (hasPercent) {
+    // The label is Amazon's own wording ("Typical price:", "List Price:") and is
+    // kept verbatim so the cell matches what a buyer sees on the page.
+    const reference = basisValue && basisLabel ? `${basisLabel} ${basisValue}` : "";
+    parts.push(reference ? `${percent}（${reference}）` : percent);
+  }
+
+  return parts.join(" ").trim();
+}
+
+// Coupons render in three shapes: a classic badge line ("Save 5% with
+// coupon"), the newer claim tile ("Coupon price $16.14" / "Saving $0.85 at
+// checkout"), and brand promotions ("Save 10% with brand promotion
+// N15B9GRN98CF"). Whatever the page carries is reported; an empty coupon block
+// (every page has one) yields an empty cell.
+export function extractCoupon(html) {
+  const page = stripNonTextNodes(String(html || ""));
+  const sections = COUPON_SECTION_IDS.map((elementId) => readSection(page, elementId)).filter(Boolean);
+  if (!sections.length) {
+    return "";
+  }
+
+  const scope = sections.join("\n");
+  const parts = [];
+
+  for (const pattern of [
+    /Save\s+\d+(?:\.\d+)?%\s+with\s+coupon/i,
+    /Save\s+\$\s?\d+(?:\.\d+)?\s+with\s+coupon/i,
+    /\$\s?\d+(?:\.\d+)?\s+off\s+coupon/i,
+    /Apply\s+\$\s?\d+(?:\.\d+)?\s+coupon/i
+  ]) {
+    const match = scope.match(pattern);
+    if (match) {
+      parts.push(normalizeText(match[0]));
+      break;
+    }
+  }
+
+  const badge = normalizeText(
+    stripTags(
+      decodeHtml(
+        readBalancedByClass(scope, "div", "couponBadge") ||
+          readBalancedByClass(scope, "span", "couponBadge") ||
+          readBalancedByClass(scope, "span", "couponLabelText")
+      )
+    )
+  );
+  if (badge && /coupon|save|off/i.test(badge)) {
+    parts.push(badge);
+  }
+
+  const tile = readBalancedByClass(scope, "div", "ct-coupon-tile-container") || scope;
+  const couponPrice = readValueAfterLabel(tile, "Coupon price");
+  if (couponPrice) {
+    parts.push(`Coupon price ${couponPrice}`);
+  }
+  const saving = readValueAfterLabel(tile, "Saving");
+  if (saving) {
+    parts.push(`Saving ${saving} at checkout`);
+  }
+
+  const promotionLabel = normalizeText(
+    stripTags(decodeHtml(readBalancedByPrefix(scope, "label", "greenBadge")))
+  );
+  const promotionCode = readFirstMatch(scope, /with brand promotion\s+([A-Z0-9]{6,})/i);
+  if (promotionLabel && /save/i.test(promotionLabel)) {
+    parts.push(promotionCode ? `${promotionLabel} with brand promotion ${promotionCode}` : promotionLabel);
+  }
+
+  return dedupe(parts.map((part) => normalizeText(part)).filter(Boolean)).join(" | ");
+}
+
+// Reads the price that follows a label inside a coupon tile, e.g. the "$16.14"
+// after "Coupon price".
+function readValueAfterLabel(block, labelText) {
+  const anchor = String(block || "").search(new RegExp(`>\\s*${labelText}\\s*<`, "i"));
+  if (anchor < 0) {
+    return "";
+  }
+
+  return collapseWhitespace(
+    normalizeText(
+      stripTags(decodeHtml(readFirstMatch(block.slice(anchor), /<span class="a-offscreen">([^<]*)<\/span>/i)))
+    )
+  );
+}
+
+// Balanced subtree of the first `<tag class="... name ...">` element.
+function readBalancedByClass(text, tagName, className) {
+  const open = new RegExp(`<${tagName}\\b[^>]*class="[^"]*\\b${className}\\b[^"]*"[^>]*>`);
+  const match = open.exec(String(text || ""));
+  if (!match) {
+    return "";
+  }
+
+  return sliceBalancedTag(text, match.index + match[0].length, tagName);
+}
+
+// Balanced subtree of the first element whose id starts with `idPrefix`
+// (Amazon suffixes promotional ids with a per-render token).
+function readBalancedByPrefix(text, tagName, idPrefix) {
+  const open = new RegExp(`<${tagName}\\b[^>]*id="${idPrefix}[^"]*"[^>]*>`, "i");
+  const match = open.exec(String(text || ""));
+  if (!match) {
+    return "";
+  }
+
+  return sliceBalancedTag(text, match.index + match[0].length, tagName);
+}
+
+function sliceBalancedTag(text, start, tagName) {
+  let depth = 1;
+  const pattern = new RegExp(`<${tagName}\\b[^>]*>|</${tagName}>`, "gi");
+  pattern.lastIndex = start;
+
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    depth += match[0][1] === "/" ? -1 : 1;
+    if (depth === 0) {
+      return text.slice(start, match.index);
+    }
+  }
+
+  return text.slice(start, start + 40000);
+}
+
+function readFirstMatch(text, pattern) {
+  const match = String(text || "").match(pattern);
+  return match?.[1] || "";
+}
+
+function collapseWhitespace(value) {
+  return String(value || "").replace(/\s+/g, "");
 }
 
 function sliceBalancedDivs(text, start) {

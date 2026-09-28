@@ -1,7 +1,8 @@
-# AMZ-Check-CRX
+# Amazon Listing Check Helper
 
-Amazon Listing Check Helper — a Chrome MV3 extension that batch-checks Amazon.com
-listings by ASIN and exports the collected data to XLSX.
+Chrome MV3 extension that batch-checks Amazon.com listings by ASIN and exports the
+collected data to XLSX. Runs headless on a server (see [docs/runner.md](docs/runner.md)),
+and doubles as a Hermes skill (`amazon-listing-check`). Repo: `AMZ-Check-CRX`.
 
 ## What it collects
 
@@ -12,6 +13,9 @@ Every column is optional and controlled by a checkbox in the popup:
 | Title | `#productTitle` |
 | Highlight | `.dp-title-differentiators` (subtitle under the title; absent on many ASINs) |
 | Rating / Rating Count | `#acrPopover` and `#acrCustomerReviewText`, as two columns |
+| 产品价格 | buy-box price from `.priceToPay` (the struck-through reference price is never used) |
+| 优惠券 | coupon badge line, claim tile (`Coupon price $16.14` / `Saving $0.85 at checkout`), and brand-promotion code; blank when the listing has no coupon |
+| 折扣 | savings badge plus its reference price, e.g. `-9%（Typical price: $54.99）`; blank when there is no discount |
 | BP | `#feature-bullets` items joined into one cell |
 | 差评 (critical reviews) | reviews page filtered to 1–3 stars, up to 30, numbered in one cell |
 | A图 | 2nd gallery image, embedded into the cell |

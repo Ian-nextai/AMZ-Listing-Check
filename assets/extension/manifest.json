@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Amazon Listing Check Helper",
-  "version": "2.3.0",
+  "version": "2.4.1",
   "description": "Batch-check Amazon.com listings by ASIN: title, highlight, ratings, bullet points, stock and delivery status, images and critical reviews, exported to XLSX.",
   "icons": {
     "16": "icon16.png"

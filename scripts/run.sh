@@ -90,6 +90,31 @@ done
 [ -n "$FRESH" ] && rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
+# MV3 service worker 的模块图会被 profile 缓存住：改了扩展代码、只重启浏览器
+# 甚至 bump manifest 版本都不够——扩展页面（runner.html）读到的是新文件，
+# 而任务实际跑在 SW 里，读的是旧模块。表现是任务照常成功、却导出旧列
+# （排查耗费很久：一次静默丢了三列）。启动前清掉 SW 缓存，强制重新注册。
+# 只删 Service Worker 目录：cookie 与登录态在 Default/Cookies，不受影响。
+rm -rf "$PROFILE/Default/Service Worker"
+
+# 端口必须先真正关闭：若上一轮 Chrome 没死透，新实例会因 profile 锁起不来，
+# 而端口探测仍会连上那个旧实例——它带着旧扩展跑完整批任务，静默产出错误列。
+# 这种「结果看起来正常但是旧的」比直接报错危险得多，所以这里等到端口关闭为止。
+PORT_WAS_OPEN=0
+for i in $(seq 1 30); do
+  if curl -sf -o /dev/null "http://127.0.0.1:$PORT/json/version"; then
+    PORT_WAS_OPEN=1
+    sleep 1
+  else
+    break
+  fi
+done
+if [ "$PORT_WAS_OPEN" = "1" ] && curl -sf -o /dev/null "http://127.0.0.1:$PORT/json/version"; then
+  echo "ERROR: $PORT 上仍有旧 Chromium 在运行，拒绝复用（它会带着旧扩展产出错误结果）。"
+  echo "请先停掉占用该端口的进程：ss -tlnp | grep $PORT"
+  exit 1
+fi
+
 "$CHROME" --no-sandbox --disable-gpu --headless=new \
   --user-data-dir="$PROFILE" \
   --disable-features=glic \
@@ -160,6 +185,18 @@ print('FAILURES="%s"' % safe('; '.join(r.get('failures') or ['无'])))
 DOWNLOADS=/root/Downloads
 echo "XLSX:"
 for name in $XLSX_LIST; do echo "  $DOWNLOADS/$name"; done
+
+# 产物守卫：表头必须含本次启用检查项对应的列。曾出现「任务成功、却导出旧列」的
+# 静默错误（扩展代码更新后 SW 仍加载旧模块），所以这里校验产物本身而不是运行过程。
+if [ -n "$MAIN_XLSX" ] && [ -f "$DOWNLOADS/$MAIN_XLSX" ]; then
+  REQUIRED_LABELS="ASIN,Status,产品价格,优惠券,折扣,Title,Rating,BP,Category,Seller"
+  if [ "$REVIEWS" = "--with-reviews" ]; then REQUIRED_LABELS="$REQUIRED_LABELS,差评"; fi
+  if ! node "$SCRIPT_DIR/check-xlsx-header.mjs" "$DOWNLOADS/$MAIN_XLSX" "$REQUIRED_LABELS"; then
+    echo "ERROR: 产物表头与本次启用的检查项不符 —— 极可能是扩展代码更新后仍在跑旧模块。"
+    echo "  处理：run.sh 会清 Service Worker 缓存；若仍复现，改扩展代码后需 bump manifest version。"
+    exit 1
+  fi
+fi
 
 if [ -n "$FEISHU" ]; then
   REV_TXT=$([ "$REVIEWS" = 1 ] && echo 开 || echo 关)

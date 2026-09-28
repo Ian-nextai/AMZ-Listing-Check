@@ -527,6 +527,10 @@ async function processAsin(task, asin) {
     // 把标签页导航走再回来）。用块作用域圈住，出块即不可达，别让它挂过整段。
     let extractedChecks;
     {
+      if (wantsPriceWidget(task.selectedChecks)) {
+        await waitForPriceWidget(workerTabId);
+      }
+
       const pageData = await collectPageDataFromWorkerTab();
       const pageHtml = pageData.html;
 
@@ -1242,6 +1246,52 @@ async function ensureGateCleared(url) {
   return true;
 }
 
+// The price widget — and with it the coupon block — is injected by Amazon's own
+// JavaScript after the document has loaded, so a tab that already reports
+// "complete" can still be missing it. That happens most often on cached loads
+// and on slow devices, and it silently blanked the price columns. Extraction
+// therefore waits for the widget, bounded, whenever a price-related check is on.
+const PRICE_WIDGET_TIMEOUT_MS = 8000;
+const PRICE_WIDGET_POLL_MS = 400;
+const PRICE_WIDGET_SELECTOR = [
+  "#corePriceDisplay_desktop_feature_div .a-price",
+  "#corePrice_feature_div .a-price",
+  "#corePrice_desktop .a-price",
+  "#price_inside_buybox",
+  "#priceblock_ourprice"
+].join(", ");
+
+function wantsPriceWidget(selectedChecks) {
+  return Boolean(selectedChecks?.price || selectedChecks?.coupon || selectedChecks?.discount);
+}
+
+async function waitForPriceWidget(tabId) {
+  if (!Number.isInteger(tabId)) {
+    return false;
+  }
+
+  const deadline = Date.now() + PRICE_WIDGET_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        world: "MAIN",
+        func: (selector) => Boolean(document.querySelector(selector)),
+        args: [PRICE_WIDGET_SELECTOR]
+      });
+      if (results?.[0]?.result) {
+        return true;
+      }
+    } catch (error) {
+      // A tab mid-navigation throws here; the next poll retries.
+    }
+
+    await sleep(PRICE_WIDGET_POLL_MS);
+  }
+
+  return false;
+}
+
 async function collectPageDataFromWorkerTab() {
   if (!Number.isInteger(workerTabId)) {
     throw new Error("工作标签页不可用。");
@@ -1523,6 +1573,11 @@ function collectMissingFieldNotes(selectedChecks, extractedChecks) {
   }
   if (selectedChecks.rating && !extractedChecks.ratingValue && !extractedChecks.ratingCount) {
     notes.push("无评价数据");
+  }
+  // Missing coupon or discount is the normal state of a listing, so only an
+  // absent price is worth a note here.
+  if (selectedChecks.price && !extractedChecks.price) {
+    notes.push("无价格");
   }
   if (selectedChecks.bulletPoints && !extractedChecks.bulletPoints?.length) {
     notes.push("无 BP");
