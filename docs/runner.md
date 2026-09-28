@@ -222,11 +222,12 @@ cloudflared tunnel --url http://127.0.0.1:8788 &       # 输出临时公网 URL
 7. 自写 WS 客户端：等 HTTP 101 握手完成才算连接就绪（TCP connect ≠ 可用）+ 每请求超时 + 回 ping（opcode 0x9→0xA）
 8. VNC 密码文件必须 `x11vnc -storepasswd` 生成（DesCrypt 加密格式），明文文件 → "password check failed"
 9. "Currently unavailable" 对中国 IP 常见——抓取本身成功，只是该买家地址不可售
-10. **图片 CDN 被墙 → A图/详情图 随机缺图**：直连 `m.media-amazon.com` 会在 TLS 层被
-   RST（`curl` exit 35 / HTTP=000，浏览器 `fetch` 报 `Failed to fetch`），而
-   `www.amazon.com` 直连正常。扩展的下载失败是静默的，只在结果里留一句
-   `imageAError: "A图下载失败。"`，所以表现为「任务全 success、列在但某几行图空」。
-   run.sh 用 PAC 只把 `*.media-amazon.com` 交给本地代理（`--image-proxy` 改地址，
-   `--no-image-proxy` 关掉），`www.amazon.com` 仍直连以保持登录会话出口 IP 不变。
-   注意 PAC **必须经 HTTP 提供**：`--proxy-pac-url=file://` 实测被 Chrome 静默忽略。
-   代理不可用时会打印「图片代理: 关」并继续直连（不阻塞抓取）。
+10. **图片 CDN 被按 SNI 阻断 → A图/详情图 缺图**：`m.media-amazon.com` 在 TLS 握手阶段
+   就被 RST（`curl` exit 35 / HTTP=000，扩展内 `fetch` 报 `Failed to fetch`），而同 IP
+   换 SNI 到 `images-na.ssl-images-amazon.com` 立即成功，且**同一图片路径在各 Amazon 图片
+   CDN 主机上返回同字节**。扩展因此内置域名回退链（`imageUrlCandidates()`：原主机优先，
+   再依次 images-na → images-fe → images.amazon.com），无需任何代理即可取图。
+   失败是静默的，只在结果里留 `imageAError: "A图下载失败。"`；扩展 fetch 用 `force-cache`，
+   所以被缓存过的图能拿到、新图必然失败——别误判成偶发。
+   若本机连备用 CDN 域名也不通，用 `--image-proxy <host:port>` 把 `*.media-amazon.com`
+   交给本地代理（PAC 必须经 HTTP 提供：`--proxy-pac-url=file://` 会被 Chrome 静默忽略）。

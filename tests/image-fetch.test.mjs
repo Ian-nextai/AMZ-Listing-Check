@@ -6,6 +6,7 @@ import {
   computeThumbnailSize,
   downscaleImageBytes,
   fetchImageAsBase64,
+  imageUrlCandidates,
   IMAGE_MAX_EDGE_LIMIT,
   IMAGE_THUMBNAIL_MAX_EDGE,
   normalizeMaxImageEdge,
@@ -138,4 +139,116 @@ test("normalizeMaxImageEdge treats zero and negatives as 'no downscaling'", () =
 test("normalizeMaxImageEdge caps absurd sizes", () => {
   assert.equal(normalizeMaxImageEdge(100000), IMAGE_MAX_EDGE_LIMIT);
   assert.equal(normalizeMaxImageEdge(IMAGE_MAX_EDGE_LIMIT - 1), IMAGE_MAX_EDGE_LIMIT - 1);
+});
+
+test("imageUrlCandidates keeps the original CDN host first and reuses path and query", () => {
+  const candidates = imageUrlCandidates(
+    "https://m.media-amazon.com/images/I/a._AC_SL1500_.jpg?x=1"
+  );
+
+  assert.deepEqual(candidates, [
+    "https://m.media-amazon.com/images/I/a._AC_SL1500_.jpg?x=1",
+    "https://images-na.ssl-images-amazon.com/images/I/a._AC_SL1500_.jpg?x=1",
+    "https://images-fe.ssl-images-amazon.com/images/I/a._AC_SL1500_.jpg?x=1",
+    "https://images.amazon.com/images/I/a._AC_SL1500_.jpg?x=1"
+  ]);
+});
+
+test("imageUrlCandidates rewrites any known CDN host, not just the media one", () => {
+  const candidates = imageUrlCandidates("https://images-na.ssl-images-amazon.com/images/I/b.jpg");
+
+  assert.equal(candidates.length, 4);
+  assert.equal(candidates[0], "https://images-na.ssl-images-amazon.com/images/I/b.jpg");
+  assert.equal(candidates[1], "https://m.media-amazon.com/images/I/b.jpg");
+});
+
+test("imageUrlCandidates leaves unrelated hosts and non-http urls alone", () => {
+  assert.deepEqual(imageUrlCandidates("https://example.com/a.jpg"), ["https://example.com/a.jpg"]);
+  assert.deepEqual(imageUrlCandidates("data:image/png;base64,AAAA"), []);
+  assert.deepEqual(imageUrlCandidates(""), []);
+});
+
+test("imageUrlCandidates can be pinned to the original host with hosts:false", () => {
+  assert.deepEqual(
+    imageUrlCandidates("https://m.media-amazon.com/images/I/a.jpg", { hosts: false }),
+    ["https://m.media-amazon.com/images/I/a.jpg"]
+  );
+});
+
+test("fetchImageAsBase64 falls back to the next CDN host when the first is blocked", async () => {
+  const seen = [];
+  const fetchImpl = async (url) => {
+    seen.push(url);
+    if (new URL(url).hostname === "m.media-amazon.com") {
+      throw new TypeError("Failed to fetch");
+    }
+    return {
+      ok: true,
+      headers: { get: () => "image/jpeg" },
+      arrayBuffer: async () => new Uint8Array([9, 8, 7]).buffer
+    };
+  };
+
+  const result = await fetchImageAsBase64(
+    "https://m.media-amazon.com/images/I/a.jpg",
+    fetchImpl,
+    { maxEdge: 0 }
+  );
+
+  assert.deepEqual(result, { base64: "CQgH", extension: "jpg", byteLength: 3 });
+  assert.deepEqual(seen, [
+    "https://m.media-amazon.com/images/I/a.jpg",
+    "https://images-na.ssl-images-amazon.com/images/I/a.jpg"
+  ]);
+});
+
+test("fetchImageAsBase64 tries every CDN host before giving up", async () => {
+  const seen = [];
+  const fetchImpl = async (url) => {
+    seen.push(new URL(url).hostname);
+    throw new TypeError("Failed to fetch");
+  };
+
+  assert.equal(await fetchImageAsBase64("https://m.media-amazon.com/images/I/a.jpg", fetchImpl), null);
+  assert.deepEqual(seen, [
+    "m.media-amazon.com",
+    "images-na.ssl-images-amazon.com",
+    "images-fe.ssl-images-amazon.com",
+    "images.amazon.com"
+  ]);
+});
+
+test("fetchImageAsBase64 still honours hosts:false (single attempt)", async () => {
+  const seen = [];
+  const fetchImpl = async (url) => {
+    seen.push(url);
+    throw new TypeError("Failed to fetch");
+  };
+
+  assert.equal(
+    await fetchImageAsBase64("https://m.media-amazon.com/images/I/a.jpg", fetchImpl, { hosts: false }),
+    null
+  );
+  assert.deepEqual(seen, ["https://m.media-amazon.com/images/I/a.jpg"]);
+});
+
+test("fetchImageAsBase64 passes maxEdge through on a fallback host", async () => {
+  const fetchImpl = async (url) => {
+    if (new URL(url).hostname === "m.media-amazon.com") {
+      return { ok: false, headers: { get: () => "" }, arrayBuffer: async () => new ArrayBuffer(0) };
+    }
+    return {
+      ok: true,
+      headers: { get: () => "image/jpeg" },
+      arrayBuffer: async () => new Uint8Array([4, 5]).buffer
+    };
+  };
+
+  const result = await fetchImageAsBase64(
+    "https://m.media-amazon.com/images/I/a.jpg",
+    fetchImpl,
+    { maxEdge: 0 }
+  );
+
+  assert.deepEqual(result, { base64: "BAU=", extension: "jpg", byteLength: 2 });
 });

@@ -99,7 +99,12 @@ python3 -c "import openpyxl; ws=openpyxl.load_workbook('/root/Downloads/<文件>
 13. **改了扩展代码却导出旧列（最隐蔽的坑，曾静默丢三列）**：任务实际跑在 MV3 Service Worker 里，而 SW 的**模块图**被 profile 缓存；只重启浏览器、甚至 bump manifest version 都不够（扩展页面 runner.html 读到的是新文件，SW 跑的是旧模块）。症状是任务全部 success、xlsx 却少列。处置：`run.sh` 启动前 `rm -rf "$PROFILE/Default/Service Worker"`（只删该目录，cookie 在 Default/Cookies 不受影响）。**别用「读已加载扩展的 manifest version」做校验**——manifest 每次启动都新读，测不出旧模块，会误报。
 14. **产物守卫**：`run.sh` 跑完用 `check-xlsx-header.mjs` 断言表头含本次启用的列（失败即 exit 1），直接校验产物而非相信运行过程。注意 vendor/xlsx.mjs 是 SheetJS **浏览器构建**，`readFile()` 是抛 "Cannot access file" 的桩函数，必须用 `node:fs` 读字节再 `XLSX.read(buf,{type:'array'})`。
 15. `find /` 全盘搜索在这台机器上会跑到超时（Android/Termux 宿主），排查文件用定向 `ls`/`grep`；`ls | head` 会截断下载目录列表，误判"文件没生成"。
-16. **A图/详情图 随机缺图（不是解析器问题，是网络）**：直连 `m.media-amazon.com` 被 TLS 层 RST（`curl` exit 35，浏览器 `fetch` 报 `Failed to fetch`），`www.amazon.com` 直连正常。扩展把下载失败静默吞掉，只在结果里留 `imageAError:"A图下载失败。"`，症状是「任务全 success、列存在、个别行图空」。run.sh 已用 PAC 只把 `*.media-amazon.com` 交给本地代理（`--image-proxy` 换地址 / `--no-image-proxy` 关闭），商品页仍直连以保持登录出口 IP。**PAC 必须经 HTTP 提供**（`--proxy-pac-url=file://` 被 Chrome 静默忽略，实测无效）。诊断顺序：先用 curl 直连+代理各打一次该 CDN 拿 HTTP 码，别再猜解析器；表头/列数量用 `check-xlsx-header.mjs` 核，图片落点看 `xl/drawings/drawing1.xml` 里 `<col>/<row>`（0 基，col 14=A图、15=详情图）。逐 ASIN 原始结果（含 `imageAUrl`/`imageAError`）在 chrome.storage 的 `amzResult:<ASIN>` 键——**不是** `task.resultsByAsin`，后者导出后会被清空。
+16. **A图/详情图 缺图（不是解析器问题，是下载失败）**：`m.media-amazon.com` 被按 **SNI 阻断**——TLS 握手刚发 ClientHello 就收 RST（`curl` exit 35 / HTTP=000，扩展内 `fetch` 报 `Failed to fetch`），同 IP 换 SNI 到 `images-na.ssl-images-amazon.com` 立刻 TLSv1.3 成功。**同一图片路径在所有 Amazon 图片 CDN 主机上是同字节**（实测 33818 bytes 完全一致），所以 `image-fetch.js` 里加了 `imageUrlCandidates()` 回退链：原主机优先，失败依次 `images-na` → `images-fe` → `images.amazon.com`（路径/查询串原样保留；`{hosts:false}` 可关）。新用到的域名必须同时加进 manifest `host_permissions`，否则扩展自己会拦下请求。
+    - **为什么"页面能看图、抓取却没图"**：页面里 `<img>` 用的域名由 Amazon 按你的网络下发（多半就是 images-na），而扩展是从 `colorImages` JSON 里取 `hiRes`，该字段恒为 `m.media-amazon.com`——正好踩中被掐的那条。
+    - **为什么修复前"只有个别图缺"**：扩展 fetch 用 `cache:"force-cache"`，之前命中过 HTTP 缓存的图能拿到（实测 27ms、33818 bytes），**没缓存过的新图必然失败**。所以别被"大部分图都在"误导成偶发。
+    - 失败是**静默**的：结果里只留 `imageAError:"A图下载失败。"`，行仍是 success。逐 ASIN 原始数据在 chrome.storage 的 `amzResult:<ASIN>` 键（**不是** `task.resultsByAsin`，导出后会被清空）。
+    - 诊断顺序：① `curl` 直连该 CDN 拿 HTTP 码（000=网络不通）→ ② 同路径换域名再打一次（200 即回退方案成立）→ ③ 在扩展上下文用 `cache:"no-store"` 复测（绕开缓存才看得见真相）→ ④ 表头用 `check-xlsx-header.mjs` 核、图片落点看 `xl/drawings/drawing1.xml` 的 `<col>/<row>`（0 基，col 14=A图、15=详情图）。
+    - 兜底：`run.sh --image-proxy <host:port>` 可把 `*.media-amazon.com` 交给本地代理（PAC 经 HTTP 提供，`--proxy-pac-url=file://` 实测被 Chrome 静默忽略）；仅在连备用 CDN 域名也取不到时才需要。
 
 ## 扩展单独人工使用（不跑无头链路时）
 

@@ -130,8 +130,58 @@ export async function downscaleImageBytes(
   }
 }
 
-export async function fetchImageAsBase64(url, fetchImpl = fetch, options = {}) {
+// Amazon 图片 CDN 有多个等价主机：同一个 /images/I/xxx.jpg 路径在任意一个上
+// 返回的字节都一样（实测 images-na / images-fe 与 m.media-amazon.com 同图同字节）。
+// 但 m.media-amazon.com 在部分网络会被按 SNI 阻断——TLS 握手刚发出 ClientHello
+// 就收到 RST（curl exit 35 / 浏览器 fetch 报 Failed to fetch），此时换主机即可取到。
+// 原主机优先（命中缓存概率最高），失败再依次回退；Amazon 页面自己也是这么分发的。
+// 注意：host_permissions 里必须声明用到的每个主机，否则回退请求会被扩展拦下。
+const IMAGE_CDN_HOSTS = [
+  "m.media-amazon.com",
+  "images-na.ssl-images-amazon.com",
+  "images-fe.ssl-images-amazon.com",
+  "images.amazon.com"
+];
+
+export function imageUrlCandidates(url, options = {}) {
   const target = String(url || "").trim();
+  if (!/^https?:\/\//i.test(target)) {
+    return [];
+  }
+
+  if (options.hosts === false) {
+    return [target];
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(target);
+  } catch (error) {
+    return [target];
+  }
+
+  if (!IMAGE_CDN_HOSTS.includes(parsed.hostname)) {
+    return [target];
+  }
+
+  // 路径与查询串原样保留，只换主机；原主机放最前（命中缓存概率最高）
+  const port = parsed.port ? `:${parsed.port}` : "";
+  const hosts = [parsed.hostname, ...IMAGE_CDN_HOSTS.filter((host) => host !== parsed.hostname)];
+  return hosts.map((host) => `${parsed.protocol}//${host}${port}${parsed.pathname}${parsed.search}`);
+}
+
+export async function fetchImageAsBase64(url, fetchImpl = fetch, options = {}) {
+  for (const candidate of imageUrlCandidates(url, options)) {
+    const downloaded = await fetchOneImageAsBase64(candidate, fetchImpl, options);
+    if (downloaded) {
+      return downloaded;
+    }
+  }
+
+  return null;
+}
+
+async function fetchOneImageAsBase64(target, fetchImpl, options = {}) {
   if (!/^https?:\/\//i.test(target)) {
     return null;
   }

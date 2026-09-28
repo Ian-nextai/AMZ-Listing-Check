@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Amazon Listing Check Helper",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "Batch-check Amazon.com listings by ASIN: title, highlight, ratings, bullet points, stock and delivery status, images and critical reviews, exported to XLSX.",
   "icons": {
     "16": "icon16.png"
@@ -28,6 +28,7 @@
     "https://www.amazon.com/*",
     "https://m.media-amazon.com/*",
     "https://images-na.ssl-images-amazon.com/*",
+    "https://images-fe.ssl-images-amazon.com/*",
     "https://images.amazon.com/*"
   ],
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2frP38KRvlZYe16kMSFPiIV1S3fjmNJjq9vkG+K8VrvCN1VIdR9PTRIRiuQj11oKk2UYtRonKGD3tbQWXCnRtUKAg6bw+VaJBI1gC5qxdmPFkEFB369FWKRYS2mwgl+q/d7b8Z9hpl94W4Xz7GcRU72+auVOo5wd7m+llm/+fWNbHKHYPpDtLc2zbtPV17SZKZFkTUIc2G59ZW60Y+y2k6ENP5qXOlaMNI9z6nsNLwNW1dPajjpHGsY2+m+wWon7eCrk6ff+9nnj6Xf2aWEJWf9iAcDNkAj5nrCoBja80rheBsSkHw6FX7Zra7zLjzQB10+KPlEI6IGvvUnM6XpLqQIDAQAB"

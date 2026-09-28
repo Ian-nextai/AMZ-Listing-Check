@@ -15,8 +15,8 @@
 #     --fresh-profile    删除持久 profile 冷启动（正常情况不要用；邮编/登录态会丢）
 #     --check-login      只检测登录态后退出（输出 JSON：loggedIn/greeting）
 #     --login            打印无头环境的人工登录指引后退出
-#     --image-proxy hp:port 图片 CDN 代理地址（默认 127.0.0.1:7890；仅 *.media-amazon.com 走它）
-#     --no-image-proxy   关掉图片代理，图片全走直连（CDN 被墙时会缺 A图/详情图）
+#     --image-proxy hp:port 图片 CDN 改走本地代理（默认不用——扩展自带 CDN 域名回退，
+#                        仅在连备用 CDN 域名也取不到时才需要）
 #
 # 退出码: 0=至少1个ASIN成功  1=链路错误  2=全部ASIN失败  3=差评模式但未登录
 set -u
@@ -31,7 +31,7 @@ ZIP=10010; DELAY=1200; REVIEWS=""; RETRY=""; FEISHU=""
 MAX_IMAGE_EDGE=""; CHUNK=""
 FEISHU_TO="${FEISHU_DEFAULT_TO:-}"; ID_TYPE=open_id
 FRESH=""; CHECK_LOGIN=""; LOGIN=""; NO_IMAGES=""
-IMAGE_PROXY="${IMAGE_PROXY:-127.0.0.1:7890}"; NO_IMAGE_PROXY=""
+IMAGE_PROXY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --zip) ZIP="$2"; shift 2;;
@@ -48,7 +48,6 @@ while [ $# -gt 0 ]; do
     --check-login) CHECK_LOGIN=1; shift;;
     --login) LOGIN=1; shift;;
     --image-proxy) IMAGE_PROXY="$2"; shift 2;;
-    --no-image-proxy) NO_IMAGE_PROXY=1; shift;;
     *) echo "未知选项: $1"; exit 1;;
   esac
 done
@@ -102,13 +101,13 @@ mkdir -p "$PROFILE"
 # 只删 Service Worker 目录：cookie 与登录态在 Default/Cookies，不受影响。
 rm -rf "$PROFILE/Default/Service Worker"
 
-# 图片 CDN 定向代理（规则见 scripts/proxy.pac）。
-# 直连 m.media-amazon.com 会被 TLS 层重置（curl exit 35 / HTTP=000），
-# 症状是任务全 success、A图/详情图 随机缺图，结果里只留 imageAError="A图下载失败。"。
-# 只给 *.media-amazon.com 套代理，www.amazon.com 保持直连（登录会话出口 IP 不变）。
+# 图片 CDN 定向代理（可选，规则见 scripts/proxy.pac）。
+# 主修复在扩展层：m.media-amazon.com 被按 SNI 阻断时，扩展会自带回退到
+# images-na / images-fe 等等价主机（同路径同字节），所以默认不需要代理。
+# 只有在连备用 CDN 域名也取不到的网络下，才用 --image-proxy 交给本地代理。
 # 注意 PAC 必须经 HTTP 提供：--proxy-pac-url=file:// 实测被 Chrome 静默忽略。
 PAC_PID=""; PAC_ARG=""; PAC_DIR=""
-if [ -z "$NO_IMAGE_PROXY" ] && [ -z "${NO_IMAGES:-}" ]; then
+if [ -n "$IMAGE_PROXY" ] && [ -z "${NO_IMAGES:-}" ]; then
   # 用真实目标探测：返回任何 HTTP 码都算通路，000 才是真不通。
   PROXY_CODE=$(curl -x "http://$IMAGE_PROXY" -s -o /dev/null -w '%{http_code}' --max-time 8 \
     "https://m.media-amazon.com/images/" 2>/dev/null || echo 000)
