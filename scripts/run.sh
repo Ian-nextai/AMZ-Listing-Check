@@ -27,7 +27,7 @@ shift
 
 ZIP=10010; DELAY=1200; REVIEWS=""; RETRY=""; FEISHU=""
 MAX_IMAGE_EDGE=""; CHUNK=""
-FEISHU_TO="${FEISHU_DEFAULT_TO:-}"; ID_TYPE=open_id
+FEISHU_TO="${FEISHU_DEFAULT_TO:-ou_c9d9e0dc295dd8f2d0128ee049faadb8}"; ID_TYPE=open_id
 FRESH=""; CHECK_LOGIN=""; LOGIN=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -77,6 +77,16 @@ if [ -f "$PORT_PID_FILE" ]; then
   fi
   rm -f "$PORT_PID_FILE"
 fi
+# Chrome 被 kill 后 SingletonLock 不会自动清；陈旧锁会让下一批任务以为
+# 「另一个实例在用这个 profile」而立即退出（cdp timeout）。锁文件只在
+# 持锁进程存活时有效，这里在启动前把指向死进程（或无进程）的锁清掉。
+for LOCK in "$PROFILE"/Singleton*; do
+  [ -e "$LOCK" ] || continue
+  LOCK_PID=$(readlink "$LOCK" 2>/dev/null | sed 's/.*-//')
+  if [ -z "$LOCK_PID" ] || ! kill -0 "$LOCK_PID" 2>/dev/null; then
+    rm -f "$LOCK"
+  fi
+done
 [ -n "$FRESH" ] && rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
