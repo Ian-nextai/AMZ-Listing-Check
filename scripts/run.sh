@@ -10,7 +10,7 @@
 #     --retry 1          失败 ASIN 自动补跑次数（默认 1）
 #     --chunk 8          每批 ASIN 数（默认 0=不分批）；批间清空扩展图片缓存，省内存
 #     --feishu           跑完自动发飞书（文件+摘要）；不加则由 agent 在回复中交付文件
-#     --feishu-to <id>   接收者（不传则用环境变量 FEISHU_CHAT_ID；发群传 chat_id 并配 --id-type chat_id）
+#     --feishu-to <id>   接收者（不传则用环境变量 FEISHU_CHAT_ID；发私聊配 --id-type union_id，发群配 chat_id）
 #     --id-type open_id  receive_id_type（默认 open_id）
 #     --fresh-profile    删除持久 profile 冷启动（正常情况不要用；邮编/登录态会丢）
 #     --check-login      只检测登录态后退出（输出 JSON：loggedIn/greeting）
@@ -36,6 +36,7 @@ while [ $# -gt 0 ]; do
     --max-image-edge) MAX_IMAGE_EDGE="--max-image-edge $2"; shift 2;;
     --chunk) CHUNK="--chunk $2"; shift 2;;
     --with-reviews) REVIEWS="--with-reviews"; shift;;
+    --no-images) NO_IMAGES="--no-images"; shift;;
     --retry) RETRY="--retry $2"; shift 2;;
     --feishu) FEISHU=1; shift;;
     --feishu-to) FEISHU_TO="$2"; shift 2;;
@@ -51,6 +52,7 @@ CHROME="${CHROME:-$(ls -d "${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwrigh
 EXT="$SKILL_DIR/assets/extension"
 PROFILE=/root/.hermes/amazon-profile
 PORT=19222
+PORT_PID_FILE="${TMPDIR:-/tmp}/amz-chrome-$PORT.pid"
 
 [ -x "$CHROME" ] || { echo "缺 Chromium，先跑: $SCRIPT_DIR/setup.sh"; exit 1; }
 [ -d "$EXT" ] || { echo "缺扩展目录 $EXT，先跑 setup.sh"; exit 1; }
@@ -64,7 +66,17 @@ if [ -n "$LOGIN" ]; then
   exit 0
 fi
 
-pkill -f "remote-debugging-port=$PORT" 2>/dev/null && sleep 2
+# 按 PID 精确回收上一轮残留，不要用 pkill -f：调用方 shell 的命令行里往往
+# 带着整条命令（含 --remote-debugging-port=19222），模式匹配会把它连同本脚本
+# 一起杀掉，表现为 Chrome 从未启动、drive.mjs 报 cdp timeout。
+if [ -f "$PORT_PID_FILE" ]; then
+  OLD_PID=$(cat "$PORT_PID_FILE" 2>/dev/null)
+  if [ -n "$OLD_PID" ] && [ "$OLD_PID" != "$$" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+    kill "$OLD_PID" 2>/dev/null
+    sleep 2
+  fi
+  rm -f "$PORT_PID_FILE"
+fi
 [ -n "$FRESH" ] && rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
@@ -75,7 +87,9 @@ mkdir -p "$PROFILE"
   --remote-debugging-port=$PORT \
   about:blank >/dev/null 2>&1 &
 CHROME_PID=$!
-trap 'kill $CHROME_PID 2>/dev/null || true' EXIT
+echo "$CHROME_PID" > "$PORT_PID_FILE"
+# trap 也按 PID 杀，不走 pkill（同上：模式匹配会误伤调用方 shell）
+trap 'kill "$CHROME_PID" 2>/dev/null || true; rm -f "$PORT_PID_FILE"' EXIT
 
 for i in $(seq 1 30); do
   # -f 必须有：curl 对 connection refused 也返回 0（无 -f 时 -s 只看自身错误），

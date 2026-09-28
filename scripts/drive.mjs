@@ -18,6 +18,9 @@ const args = process.argv.slice(2);
 const ASINS = (args.find(a => !a.startsWith("--")) || "").split(",").map(s => s.trim()).filter(Boolean);
 const opt = (name, dflt) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : dflt; };
 const has = (name) => args.includes(`--${name}`);
+// 低内存设备上图片是最大的一笔开销：抓图要额外下载并解码，导出时
+// 又要把 base64 塞进工作簿。--no-images 只留文本列。
+const NO_IMAGES = has("no-images");
 const ZIP = opt("zip", "10010");
 const MAX_IMAGE_EDGE = opt("max-image-edge", "");   // 空 = 用扩展默认值
 const DELAY = Number(opt("delay", "1200"));
@@ -33,7 +36,7 @@ if (!ASINS.length) {
 
 const CHECKS = {
   title: true, titleHighlight: true, rating: true, bulletPoints: true,
-  imageA: true, imageDetail: true, category: true, addToCart: true,
+  imageA: !NO_IMAGES, imageDetail: !NO_IMAGES, category: true, addToCart: true,
   seller: true,
   criticalReviews: has("with-reviews"),
   stockStatus: true, deliveryPromise: true, fulfilmentRoute: true
