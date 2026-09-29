@@ -6,11 +6,38 @@
 // insertion order only costs a re-download if that ASIN is exported again.
 export const IMAGE_CACHE_MAX_BYTES = 64 * 1024 * 1024;
 
-// base64 is latin1, so one character is one byte. An entry with no payload (a
-// listing whose image failed to download) is kept as a negative cache and costs
-// nothing.
+// base64 is latin1, so one character is one byte. Only successful downloads may be
+// stored: writing a failure (null) would create a never-expiring negative cache.
+// That is not a theoretical concern — Amazon's A+ sections often reuse one store-wide
+// banner, so a single transient failure on that URL poisoned every later ASIN that
+// shared it and blanked whole batches of 详情图 while rows still reported success.
 export function imagePayloadSize(payload) {
   return Number(payload?.base64?.length || 0);
+}
+
+// Fetch-through cache policy for one image URL. Kept here rather than in the service
+// worker so the "never cache a failure" rule is covered by unit tests.
+//
+// `fetchImage(target)` is injected so callers decide how to download (and tests need
+// no network). Returns the cached payload when present, otherwise the fresh payload
+// when the download succeeds, otherwise null — with the cache left untouched on
+// failure, so the next call retries instead of inheriting the error.
+export async function loadImageIntoCache(cache, url, fetchImage, options = {}) {
+  const target = String(url || "").trim();
+  if (!target) {
+    return null;
+  }
+
+  if (cache.has(target)) {
+    return cache.get(target) || null;
+  }
+
+  const payload = await fetchImage(target, options);
+  if (payload) {
+    cache.set(target, payload);
+  }
+
+  return payload || null;
 }
 
 export function createImageCache({ maxBytes = IMAGE_CACHE_MAX_BYTES } = {}) {

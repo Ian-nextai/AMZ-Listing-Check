@@ -231,3 +231,8 @@ cloudflared tunnel --url http://127.0.0.1:8788 &       # 输出临时公网 URL
    所以被缓存过的图能拿到、新图必然失败——别误判成偶发。
    若本机连备用 CDN 域名也不通，用 `--image-proxy <host:port>` 把 `*.media-amazon.com`
    交给本地代理（PAC 必须经 HTTP 提供：`--proxy-pac-url=file://` 会被 Chrome 静默忽略）。
+11. **多文件时文件名列表不能经 `eval`**：批量跑有几十个 xlsx 时，把文件名拼成一条长的
+   `XLSX_LIST="..."` 赋值再 `eval`，引号会在 `python -c "..." → $(...) → eval` 三层传递中
+   丢失，shell 把第二个文件名当命令执行（`command not found`），随后 `XLSX_LIST: unbound
+   variable`（`set -u`），退出码 1——但抓取本身全部成功。现改为逐行写临时文件 +
+   `while IFS= read -r` 读取，临时文件在 EXIT trap 里无条件清理。单文件时不复现。

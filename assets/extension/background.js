@@ -13,7 +13,7 @@ import {
   buildImagePlacements,
   buildWorksheetRows
 } from "./src/core/export-plan.js";
-import { createImageCache, IMAGE_CACHE_MAX_BYTES } from "./src/core/image-cache.js";
+import { createImageCache, IMAGE_CACHE_MAX_BYTES, loadImageIntoCache } from "./src/core/image-cache.js";
 import { fetchImageAsBase64, normalizeMaxImageEdge } from "./src/core/image-fetch.js";
 import { dedupeReviews } from "./src/core/review-dedupe.js";
 import { dropExportPayload, putExportPayload } from "./src/core/export-relay.js";
@@ -636,16 +636,15 @@ async function collectListingImages(selectedChecks, extractedChecks, maxImageEdg
 }
 
 async function fetchListingImage(url, maxImageEdge) {
-  const target = String(url || "").trim();
-  if (!target) {
-    return null;
-  }
-
-  if (!imageCache.has(target)) {
-    imageCache.set(target, await fetchImageAsBase64(target, undefined, { maxEdge: maxImageEdge }));
-  }
-
-  return imageCache.get(target);
+  // 成功才进缓存，失败绝不落缓存（loadImageIntoCache 保证）——见 image-cache.js：
+  // A+ 详情图常全店共用一张 banner，一旦把一次瞬时失败的 null 缓存住，
+  // 后续每个 ASIN 的同一 URL 都会命中它，整批详情图归零而行仍是 success。
+  return loadImageIntoCache(
+    imageCache,
+    url,
+    (target, options) => fetchImageAsBase64(target, undefined, options),
+    { maxEdge: maxImageEdge }
+  );
 }
 
 async function resolveExportImages(results, selectedChecks, maxImageEdge) {

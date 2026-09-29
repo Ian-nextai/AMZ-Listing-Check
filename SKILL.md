@@ -105,6 +105,8 @@ python3 -c "import openpyxl; ws=openpyxl.load_workbook('/root/Downloads/<文件>
     - 失败是**静默**的：结果里只留 `imageAError:"A图下载失败。"`，行仍是 success。逐 ASIN 原始数据在 chrome.storage 的 `amzResult:<ASIN>` 键（**不是** `task.resultsByAsin`，导出后会被清空）。
     - 诊断顺序：① `curl` 直连该 CDN 拿 HTTP 码（000=网络不通）→ ② 同路径换域名再打一次（200 即回退方案成立）→ ③ 在扩展上下文用 `cache:"no-store"` 复测（绕开缓存才看得见真相）→ ④ 表头用 `check-xlsx-header.mjs` 核、图片落点看 `xl/drawings/drawing1.xml` 的 `<col>/<row>`（0 基，col 14=A图、15=详情图）。
     - 兜底：`run.sh --image-proxy <host:port>` 可把 `*.media-amazon.com` 交给本地代理（PAC 经 HTTP 提供，`--proxy-pac-url=file://` 实测被 Chrome 静默忽略）；仅在连备用 CDN 域名也取不到时才需要。
+17. **图片负缓存毒化（详情图整批归零，比缺图更隐蔽）**：`fetchListingImage` 原来把 `fetchImageAsBase64` 的返回值**无条件**写缓存，失败返回的 `null` 也被缓存住且永不过期。Amazon 的 A+ 详情图常有一张**全店共用 banner**，于是某次瞬时抖动失败后，之后每个 ASIN 的同一 URL 都命中这个 null → 详情图成批归零，而行仍是 success。特征：**A图 全满、详情图从某一批起断崖式为零**，偶有批次部分恢复（缓存被 drain 后短暂自愈，随后再次毒化）。处置：缓存策略改到 `image-cache.js` 的 `loadImageIntoCache()`（**成功才写缓存**，失败返回 null 但不落盘，下次重试即自愈），并单测覆盖"一次抖动不毒化后续"。⚠️`image-cache.js` 原注释把负缓存写成"有意设计"，别再照着它改回去。
+18. **run.sh 里文件名列表绝不能流经 `eval`**：批量跑有几十个 xlsx 时，`XLSX_LIST="..."` 这条超长赋值穿过 `python -c "..."` → `$(...)` → `eval` 三层后引号会被吃掉，shell 把第二个文件名当命令执行（`command not found`），随后 `set -u` 下报 `XLSX_LIST: unbound variable`，退出码 1 —— **抓取其实全成功**，极易误判为任务失败。单个文件时不复现，小批量测试永远暴露不了。正确做法：文件名逐行写临时文件，shell 侧 `while IFS= read -r` 读。回归验证：抽脚本片段 + 伪造 60 文件名的报告，旧版 EXIT=1 / 新版 EXIT=0。
 
 ## 扩展单独人工使用（不跑无头链路时）
 

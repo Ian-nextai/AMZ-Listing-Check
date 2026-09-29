@@ -160,7 +160,7 @@ fi
 CHROME_PID=$!
 echo "$CHROME_PID" > "$PORT_PID_FILE"
 # trap 也按 PID 杀，不走 pkill（同上：模式匹配会误伤调用方 shell）；顺带回收 PAC 服务
-trap 'kill "$CHROME_PID" 2>/dev/null || true; [ -n "${PAC_PID:-}" ] && kill "$PAC_PID" 2>/dev/null || true; rm -f "$PORT_PID_FILE"; [ -n "${PAC_DIR:-}" ] && rm -rf "$PAC_DIR" || true' EXIT
+trap 'kill "$CHROME_PID" 2>/dev/null || true; [ -n "${PAC_PID:-}" ] && kill "$PAC_PID" 2>/dev/null || true; rm -f "$PORT_PID_FILE"; [ -n "${PAC_DIR:-}" ] && rm -rf "$PAC_DIR" || true; [ -n "${XLSX_LIST_FILE:-}" ] && rm -f "$XLSX_LIST_FILE" || true' EXIT
 
 for i in $(seq 1 30); do
   # -f 必须有：curl 对 connection refused 也返回 0（无 -f 时 -s 只看自身错误），
@@ -204,8 +204,14 @@ if [ ! -f "$REPORT" ]; then
   [ -n "$FEISHU" ] && python3 "$SCRIPT_DIR/feishu_send_file.py" /dev/null "Amazon Listing Check 链路错误，无产物。ASINs: $ASINS" "$FEISHU_TO" "$ID_TYPE" >/dev/null 2>&1 || true
   exit 1
 fi
+# 报告里的短值用 eval 赋值即可，但文件名列表必须走临时文件：批量跑时几十个文件名
+# 会被拼成一条 2700+ 字符的赋值，穿过 python -c "..." 、$(...) 、eval 三层后引号会
+# 被吃掉，shell 把第二个文件名当成命令执行（command not found），赋值被破坏后
+# XLSX_LIST 在 set -u 下报 unbound variable，退出码 1 —— 抓取本身其实全成功，
+# 却看起来像任务失败。单个文件时不复现，所以小批量测试永远暴露不了。
+XLSX_LIST_FILE=$(mktemp)
 eval "$(python3 -c "
-import json
+import json, sys
 r = json.load(open('$REPORT'))
 safe = lambda s, n=200: str(s or '').replace('\"','').replace(chr(10),' ')[:n]
 print('N_OK=%d' % r['success'])
@@ -214,13 +220,19 @@ print('ZIP=%s' % safe(r.get('zip'), 10))
 print('REVIEWS=%d' % (1 if r.get('reviewsEnabled') else 0))
 print('RETRIED=%d' % r.get('retriedSuccess', 0))
 print('MAIN_XLSX=%s' % safe(r.get('mainXlsx')))
-print('XLSX_LIST="%s"' % ' '.join(r.get('xlsxFiles') or ([r.get('mainXlsx')] if r.get('mainXlsx') else [])))
-print('FAILURES="%s"' % safe('; '.join(r.get('failures') or ['无'])))
-")"
+print('FAILURES=\"%s\"' % safe('; '.join(r.get('failures') or ['无'])))
+names = r.get('xlsxFiles') or ([r.get('mainXlsx')] if r.get('mainXlsx') else [])
+with open(sys.argv[1], 'w') as handle:
+    for name in names:
+        if name:
+            handle.write(str(name) + chr(10))
+" "$XLSX_LIST_FILE")"
 
 DOWNLOADS=/root/Downloads
 echo "XLSX:"
-for name in $XLSX_LIST; do echo "  $DOWNLOADS/$name"; done
+while IFS= read -r name; do
+  [ -n "$name" ] && echo "  $DOWNLOADS/$name"
+done < "$XLSX_LIST_FILE"
 
 # 产物守卫：表头必须含本次启用检查项对应的列。曾出现「任务成功、却导出旧列」的
 # 静默错误（扩展代码更新后 SW 仍加载旧模块），所以这里校验产物本身而不是运行过程。
@@ -239,14 +251,15 @@ if [ -n "$FEISHU" ]; then
   RETRY_TXT=""
   [ "${RETRIED:-0}" -gt 0 ] && RETRY_TXT="（含自动重试成功 ${RETRIED} 个）"
   SENT=0
-  for name in $XLSX_LIST; do
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
     [ -f "$DOWNLOADS/$name" ] || continue
     python3 "$SCRIPT_DIR/feishu_send_file.py" "$DOWNLOADS/$name" \
       "Amazon Listing Check：${N_OK} 成功 / ${N_FAIL} 失败${RETRY_TXT}（邮编 ${ZIP}，差评收集${REV_TXT}）。
 失败明细: ${FAILURES}
 完整数据见附件。" \
       "$FEISHU_TO" "$ID_TYPE" >/dev/null && SENT=$((SENT + 1))
-  done
+  done < "$XLSX_LIST_FILE"
   [ "$SENT" -gt 0 ] && echo "已发飞书($FEISHU_TO)，$SENT 个文件" || echo "飞书投递失败（无可发文件）"
 else
   echo "未启用 --feishu → agent 须在回复中直接把 $DOWNLOADS 下的 xlsx 作为文件交付给用户"
