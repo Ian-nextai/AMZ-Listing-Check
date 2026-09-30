@@ -30,7 +30,7 @@ specs/, docs/           扩展开发规格与运行文档
 ## 安装为 skill
 
 ```bash
-git clone git@github.com:keithqwq/AMZ-Check-CRX.git ~/.hermes/skills/devops/amazon-listing-check
+git clone git@github.com:Ian-nextai/AMZ-Listing-Check.git ~/.hermes/skills/devops/amazon-listing-check
 ```
 
 clone 后目录直接就是 skill 根（SKILL.md 在顶层），无需再嵌套。

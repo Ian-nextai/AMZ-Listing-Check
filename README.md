@@ -2,7 +2,7 @@
 
 Chrome MV3 extension that batch-checks Amazon.com listings by ASIN and exports the
 collected data to XLSX. Runs headless on a server (see [docs/runner.md](docs/runner.md)),
-and doubles as a Hermes skill (`amazon-listing-check`). Repo: `AMZ-Check-CRX`.
+and doubles as a Hermes skill (`amazon-listing-check`). Repo: `AMZ-Listing-Check`.
 
 ## What it collects
 
@@ -114,7 +114,7 @@ This repo is laid out as a self-contained [Hermes Agent](https://hermes-agent.no
 clone it straight into your skills directory and the agent can drive the whole pipeline:
 
 ```bash
-git clone git@github.com:keithqwq/AMZ-Check-CRX.git ~/.hermes/skills/devops/amazon-listing-check
+git clone git@github.com:Ian-nextai/AMZ-Listing-Check.git ~/.hermes/skills/devops/amazon-listing-check
 ```
 
 `SKILL.md` at the repo root defines the agent workflow (pre-run confirmation, login gate

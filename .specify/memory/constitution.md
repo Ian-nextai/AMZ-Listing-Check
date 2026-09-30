@@ -1,4 +1,4 @@
-# AMZ-Check-CRX Constitution
+# AMZ-Listing-Check Constitution
 
 ## Core Principles
 
