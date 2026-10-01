@@ -12,6 +12,7 @@ export const EXPORT_COLUMNS = [  { key: "asin", label: "ASIN", check: null, widt
   { key: "discount", label: "折扣", check: "discount", width: 30 },
   { key: "bulletPoints", label: "BP", check: "bulletPoints", width: 70 },
   { key: "stockStatus", label: "库存状态", check: "stockStatus", width: 32 },
+  { key: "fitment", label: "Fitment Bar", check: "fitment", width: 12 },
   { key: "deliveryPromise", label: "配送时效", check: "deliveryPromise", width: 40 },
   { key: "fulfilmentRoute", label: "配送方式", check: "fulfilmentRoute", width: 40 },
   { key: "criticalReviews", label: "差评", check: "criticalReviews", width: 80 },

@@ -1,157 +1,145 @@
-# Amazon Listing Check Helper
+# 🛠 AMZ-Listing-Check
 
-Chrome MV3 extension that batch-checks Amazon.com listings by ASIN and exports the
-collected data to XLSX. Runs headless on a server (see [docs/runner.md](docs/runner.md)),
-and doubles as a Hermes skill (`amazon-listing-check`). Repo: `AMZ-Listing-Check`.
+#### 亚马逊 Listing 批量检查：按 ASIN 抓全字段，导出带图 Excel
 
-## What it collects
+Chrome 扩展 · 无头链路 · XLSX 导出
+License: MIT
 
-Every column is optional and controlled by a checkbox in the popup:
+给一串 ASIN，批量打开 Amazon 商品页，把标题、价格、优惠券、折扣、评分、库存、配送、A图/详情图、差评、Fitment Bar 一次抓全，导出成一张带内嵌图片的 Excel。
 
-| Column | Source |
+既能在服务器上无头跑（`scripts/run.sh` 一条命令），也能当普通 Chrome 扩展手动点着用。
+
+---
+
+## ✨ 能抓什么
+
+每一个字段都能单独开关（popup 里勾选）：
+
+| 列 | 来源 |
 | --- | --- |
-| Title | `#productTitle` |
-| Highlight | `.dp-title-differentiators` (subtitle under the title; absent on many ASINs) |
-| Rating / Rating Count | `#acrPopover` and `#acrCustomerReviewText`, as two columns |
-| 产品价格 | buy-box price from `.priceToPay` (the struck-through reference price is never used) |
-| 优惠券 | coupon badge line, claim tile (`Coupon price $16.14` / `Saving $0.85 at checkout`), and brand-promotion code; blank when the listing has no coupon |
-| 折扣 | savings badge plus its reference price, e.g. `-9%（Typical price: $54.99）`; blank when there is no discount |
-| BP | `#feature-bullets` items joined into one cell |
-| 差评 (critical reviews) | reviews page filtered to 1–3 stars, up to 30, numbered in one cell |
-| A图 | 2nd gallery image, embedded into the cell |
-| 详情图 | 1st description / A+ image, embedded into the cell |
-| Category | department store tab in `#nav-subnav` (blank for books and other digital listings, which render none) |
-| Add To Cart | presence of `#add-to-cart-button` |
-| Seller | Buy Box merchant name |
-| 库存状态 / 配送时效 / 配送方式 | `#availability`, `#mir-layout-DELIVERY_BLOCK`, offer feature slots |
+| 标题 | `#productTitle` |
+| Highlight | 标题下的副标题，很多 ASIN 没有 |
+| 评分 / 评分人数 | `#acrPopover`、`#acrCustomerReviewText` |
+| 产品价格 | buy-box 实付价（不取划线参考价） |
+| 优惠券 | 优惠券角标、claim tile、品牌促销码 |
+| 折扣 | 省钱角标 + 参考价，如 `-9%（Typical price: $54.99）` |
+| BP | `#feature-bullets` 合到一个单元格 |
+| 差评 | 评论页筛 1–3 星，最多 30 条，编号后合到一个单元格（**需登录**） |
+| A图 / 详情图 | 主图第 2 张、A+ 首图，直接内嵌进单元格 |
+| Fitment Bar | 页面左上角 Amazon Confirmed Fit 区块**有无**（输出「有」/「无」） |
+| 类目 | `#nav-subnav` 里的部门入口 |
+| 加购 / 卖家 / 库存 / 配送时效 / 配送方式 | Buy Box 与配送区块 |
 
-Fields a listing simply does not have (no reviews, no Buy Box, no A+ content, no
-department tab) leave the cell blank and log a note — they never fail the row. Only a
-missing title fails one.
+listing 本身没有的字段（无评价、无 Buy Box、无 A+）会留空并记一条 note，**不会让整行失败**；只有拿不到标题才算失败。
 
-## Install
+---
 
-1. Download or clone this repository.
-2. Open `chrome://extensions`, enable **Developer mode**.
-3. Click **Load unpacked** and select the `assets/extension` folder.
+## 🚀 两种用法
 
-## Usage
+### 1）无头跑（推荐批量用）
 
-1. Sign in to Amazon.com in the same browser profile — the critical-reviews page
-   requires a session.
-2. Open the extension popup, paste ASINs (one per line), pick the fields you want.
-3. Set the delivery zip code (a US zip is needed for the Buy Box to render, which is
-   what populates the seller and add-to-cart columns).
-4. Click **开始检查**. Progress appears in the popup and in the runner tab; results are
-   exported to XLSX when the task finishes.
+```bash
+git clone https://github.com/Ian-nextai/AMZ-Listing-Check.git
+cd AMZ-Listing-Check
+scripts/setup.sh --check          # 环境自检
 
-## Architecture
+# 基础抓取
+scripts/run.sh "B0XXXXXXX,B0YYYYYYY" --zip 10010
 
-```
-assets/extension/
-├── background.js              # service worker: task loop, navigation, scraping, export
-├── popup.html / popup.js      # input, checkboxes, progress, controls
-├── runner.html / runner.js    # monitoring page (survives popup close)
-├── offscreen.html / .js       # keepalive + blob URL minting for large downloads
-├── src/core/
-│   ├── amazon-parser.js       # DOM extraction (pure, no chrome APIs)
-│   ├── export-plan.js         # column layout and row/cell shaping
-│   ├── task-state.js          # task record shape and transitions
-│   ├── review-dedupe.js       # collapse the same review scraped from two pages
-│   ├── image-cache.js         # bounded FIFO cache for fetched images (memory cap)
-│   ├── image-fetch.js         # download images as base64
-│   ├── xlsx-image.js          # inject image parts into the generated XLSX
-│   ├── task-utils.js          # ASIN / zip normalisation
-│   ├── focus-policy.js        # when the worker tab may steal focus
-│   └── binary.js
-└── vendor/                    # SheetJS and fflate (bundled)
+# 全字段含差评（需要 Amazon 登录态）
+scripts/run.sh "B0XXXXXXX" --with-reviews
+
+# 大批量分批（批间清图片缓存，省内存）
+scripts/run.sh "B0XX,B0YY,..." --chunk 8 --retry 1
 ```
 
-The parsing and export modules are pure functions so they can be tested directly under
-Node. `tests/` covers them plus the background task lifecycle (start / discard / restart /
-pause) against a fake `chrome` API.
+产物落在 `~/Downloads/amazon-listing-check-<时间戳>.xlsx`，机器可读结果在 `amz-last-run.json`。
 
-## Notable implementation details
+退出码：`0` 至少一个成功 · `1` 链路错误 · `2` 全部失败 · `3` 差评模式但未登录。
 
-- **Image embedding.** SheetJS 0.18.5 community silently ignores worksheet `!images`, so
-  `xlsx-image.js` injects the OOXML drawing parts (`xl/media/*`, `xl/drawings/*`, rels and
-  content-type overrides) into the generated archive by hand.
-- **Image thumbnails.** The images render in a 120x120 cell but Amazon serves full
-  gallery images (commonly 1500px on the long edge, several hundred KB each), which
-  would otherwise dominate the workbook. `image-fetch.js` downscales every fetched
-  image to fit a 256px box with `createImageBitmap` + `OffscreenCanvas` before caching
-  it, preserving the aspect ratio and flattening transparency onto white. A two-ASIN
-  export drops from 1.62 MB to 58 KB. Images already smaller than the box are left
-  untouched, and if either canvas API is missing the original bytes are used as-is.
-  The **图片尺寸** popup setting controls the long edge — 128 / 256 / 512 / 1024 px, or
-  **原始尺寸** to keep Amazon's file. Headless runs pass `--max-image-edge N` (0 means
-  no downscaling); when omitted the extension uses whatever the popup last saved.
-- **Bounded image cache.** Fetched images are cached by URL so a re-export reuses them
-  instead of re-downloading. At 1024px or 原始尺寸 each payload is hundreds of KB, so an
-  unbounded cache is what actually kills a low-memory device on a 50-ASIN batch.
-  `image-cache.js` caps it at 64 MB and evicts in insertion order (FIFO), never dropping
-  the entry just written; failed downloads stay as zero-cost negative entries so exports
-  don't retry them. The runner drains it between chunks via the `clear-image-cache`
-  message (`--chunk N`); `get-status` reports the current bytes for the same purpose.
-- **Critical reviews.** Reached by splicing the ASIN into
-  `/portal/customer-reviews/{ASIN}/...&filterByStar=critical`, then clicking
-  `a[data-hook="show-more-button"]` until 30 reviews are collected. The detail page and
-  the reviews page use different markup; both are handled. The reviews page is the
-  authoritative source — the detail page truncates review bodies, so merging the two
-  would list the same review twice.
-- **Task lifecycle.** A run generation counter plus cancelled-token set keep an abandoned
-  run from writing back over the task that replaced it.
+Windows 用原生 PowerShell 入口（驱动已装的 Edge，不用下载 Chromium）：
 
-## Tests
+```powershell
+.\scripts\run.ps1 "B0XXXXXXX,B0YYYYYYY"
+```
+
+### 2）当普通扩展用
+
+Chrome → `chrome://extensions` → 开发者模式 → **Load unpacked** → 选 `assets/extension` 目录。
+popup 里贴 ASIN 列表、勾字段、填邮编，点开始即可。
+
+---
+
+## ⚙️ 常用参数
+
+| 参数 | 说明 |
+| --- | --- |
+| `--zip 10010` | 配送邮编（Buy Box 需要美国邮编才渲染） |
+| `--with-reviews` | 开差评收集（**默认关**，须先登录） |
+| `--chunk 8` | 每批 N 个，批间清图片缓存；大批量建议加 |
+| `--retry 1` | 失败 ASIN 自动补跑 |
+| `--check-login` | 只检测登录态 |
+| `--no-images` | 不要图片列 |
+
+差评**默认关闭**：省约 40% 耗时，且必须登录才能拿到。
+
+---
+
+## 🔑 关于登录
+
+不登录也能抓绝大部分字段。只有**差评**需要登录态——Amazon 的评论页有登录墙。
+
+```bash
+scripts/run.sh <ASIN> --check-login     # 看 loggedIn 是否为 true
+scripts/run.sh --login                  # 打印无头环境的登录指引
+```
+
+无头环境下要人工登录的话，走 xvfb + x11vnc + noVNC + 临时隧道，自己进浏览器登；登完正常退出 Chrome 让 cookie 落盘。详见 `docs/runner.md`。
+
+> ⚠️ 登录之后，每次抓取都会以该账号身份访问 Amazon，有账号风控的理论风险，自行权衡。
+
+---
+
+## 🧠 实现上几个关键点
+
+- **图片内嵌**：SheetJS 社区版会忽略 worksheet `!images`，所以 `xlsx-image.js` 手工往 OOXML 里塞 drawing / media / rels / content-type。
+- **图片缩略**：Amazon 原图常 1500px、几百 KB，抓取时就地压到 256px 再进缓存（两 ASIN 的导出从 1.62 MB 降到 58 KB）。
+- **图片缓存有上限**：按 URL 缓存，64 MB 封顶、FIFO 淘汰；`--chunk N` 会在批间清空。**失败不写缓存**——否则一次网络抖动会把后续所有 ASIN 的共用图片全部拖垮。
+- **解析是纯函数**：`src/core/` 下不碰 chrome API，可以直接在 Node 里单测。
+- **扩展固定 ID**：manifest 注入固定 `key`，扩展 ID 恒定，方便 CDP 定位。
+
+`tests/` 覆盖解析与导出，以及 background 的任务生命周期（start / discard / restart / pause）。跑测试：
 
 ```bash
 node --test tests/*.test.mjs
 ```
 
-## Use as a Hermes skill (agent-ready)
+---
 
-This repo is laid out as a self-contained [Hermes Agent](https://hermes-agent.nousresearch.com/docs) skill —
-clone it straight into your skills directory and the agent can drive the whole pipeline:
-
-```bash
-git clone git@github.com:Ian-nextai/AMZ-Listing-Check.git ~/.hermes/skills/devops/amazon-listing-check
-```
-
-`SKILL.md` at the repo root defines the agent workflow (pre-run confirmation, login gate
-for reviews, artifact verification, delivery rules). Humans can still use the extension
-standalone: load `assets/extension/` via `chrome://extensions` → Developer mode →
-Load unpacked.
-
-## Headless runner (server-side automation)
-
-Run this extension in headless Chromium on a server — no manual browser clicking.
-See **[docs/runner.md](docs/runner.md)** for the full pipeline:
+## 📁 目录结构
 
 ```
-./scripts/setup.sh                                   # env check & auto-install (Linux)
-./scripts/run.sh "B0GY48WL28,B0GY49QL6C"             # one-shot: Chrome+CRX → xlsx
-./scripts/run.sh "B0XXXXXXX" --with-reviews --feishu # login-gated reviews + delivery
+assets/extension/         扩展本体（可直接 Load unpacked）
+  background.js           service worker：任务循环、导航、抓取、导出
+  popup.html / popup.js   输入、勾选、进度
+  runner.html / runner.js 存活页（popup 关了也不影响）
+  src/core/               纯函数：解析、导出布局、图片、任务状态
+scripts/                  一键运行栈（零 npm 依赖）
+  run.sh / run.ps1        一条龙入口
+  drive.mjs / cdp.mjs     CDP 驱动（自写，无依赖）
+  setup.sh                环境自检
+docs/runner.md            无头运行与登录实操
 ```
 
-On Windows use the native PowerShell entry point instead — it drives your installed
-Microsoft Edge, so nothing has to be downloaded:
+---
 
-```powershell
-.\scripts\run.ps1 "B0GY48WL28,B0GY49QL6C"
-.\scripts\run.ps1 "B0XXXXXXX" -WithReviews -Chunk 8
-```
+## 🤝 关于
 
-It picks Edge first because **branded Google Chrome has refused `--load-extension`
-since version 137** — it ignores the flag without failing, leaving the extension
-silently unloaded. (Chromium, Edge, and Chrome for Testing all still allow it; see
-[docs/runner.md](docs/runner.md#为什么不用-google-chrome).)
+我是 Ian，这套东西是自己业务里跑通之后才搬出来的。
+开源出来如果对你有帮助，给个 ⭐ 就行。有问题或建议在 Issues / Discussions 里说一声。
 
-`--chunk N` splits the batch into groups of N, exporting each to its own workbook and
-draining the extension's image cache between groups — use it when a large batch runs a
-low-memory machine out of memory.
+---
 
-Runner includes a zero-dependency CDP driver (`drive.mjs`/`cdp.mjs`), Amazon login-state
-detection (`check-login.mjs`), auto-retry for flaky ASINs, and an optional Feishu delivery
-channel. Two extension tweaks are required for headless operation and already applied:
-`TAB_LOAD_TIMEOUT_MS` 45000→150000 (huge listing pages exceed 45s on ARM) and a fixed
-manifest `key` (stable extension ID for CDP targeting).
+MIT License · 自由使用 / 修改 / 再分发
+
+Made by @Ian-nextai

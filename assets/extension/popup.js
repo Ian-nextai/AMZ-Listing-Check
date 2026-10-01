@@ -21,7 +21,11 @@ const CHECKBOX_IDS = {
   criticalReviews: "check-critical-reviews",
   category: "check-category",
   addToCart: "check-add-to-cart",
-  seller: "check-seller"
+  seller: "check-seller",
+  fitment: "check-fitment",
+  price: "check-price",
+  coupon: "check-coupon",
+  discount: "check-discount"
 };
 
 // These stay off until the user turns them on; every other check defaults on.

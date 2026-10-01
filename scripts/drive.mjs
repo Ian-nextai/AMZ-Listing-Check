@@ -38,7 +38,7 @@ const CHECKS = {
   title: true, titleHighlight: true, rating: true, bulletPoints: true,
   price: true, coupon: true, discount: true,
   imageA: !NO_IMAGES, imageDetail: !NO_IMAGES, category: true, addToCart: true,
-  seller: true,
+  seller: true, fitment: true,
   criticalReviews: has("with-reviews"),
   stockStatus: true, deliveryPromise: true, fulfilmentRoute: true
 };

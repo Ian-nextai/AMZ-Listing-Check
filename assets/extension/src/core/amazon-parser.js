@@ -297,6 +297,24 @@ export function hasAddToCartButton(html) {
   return /<input[^>]*id="add-to-cart-button"[^>]*>/i.test(String(html || ""));
 }
 
+// 汽车配件的「Amazon Confirmed Fit」区块（页面左上角的 fitment bar）。
+//
+// 判定必须用**已渲染的 widget**（data-component-id 只出现在真正渲染出来的节点
+// 上）。不能搜 "partfinder" 关键字：这段 CSS 类名在没有该区块的页面里也存在
+// （实测 43 处），靠 HTML 全文搜索会把没有该区块的 ASIN 全部误判成有。
+const FITMENT_WIDGET_MARKER = 'data-component-id="automotive-pf-primary-view"';
+
+export function hasFitmentWidget(html) {
+  return String(html || "").includes(FITMENT_WIDGET_MARKER);
+}
+
+// 只要「有没有这个块」，不关心具体车型与是否相符：有 → "有"，没有 → "无"。
+// 注意与别的检查项不同，这一列**有意**对缺失也输出 "无"，而不是留空 —— 用户要
+// 的就是这个二值判断，留空会和"没跑这项检查"混淆。
+export function extractFitment(html) {
+  return hasFitmentWidget(html) ? "有" : "无";
+}
+
 // The merchant slot can hold a generic link label instead of the name, so
 // `#merchant-trust-info-card` is checked first and placeholders are rejected.
 const SELLER_PLACEHOLDER_PATTERN =
@@ -362,6 +380,9 @@ export function extractAmazonListingChecks(html, selectedChecks) {
     imageDetailUrl: selectedChecks?.imageDetail ? detailImages[0] || "" : null,
     hasAddToCart: selectedChecks?.addToCart ? hasAddToCartButton(html) : null,
     sellerName: selectedChecks?.seller ? extractSellerName(html) : null,
+    // 未启用该检查项时整个字段都不出现（而不是 null/undefined）：既有的
+    // deepStrictEqual 断言按字段全量比对，多一个键就会被打挂。
+    ...(selectedChecks?.fitment ? { fitment: extractFitment(html) } : {}),
     criticalReviews: selectedChecks?.criticalReviews ? extractCriticalReviews(html) : null,
     stockStatus: selectedChecks?.stockStatus ? extractStockStatus(html) : null,
     deliveryPromise: selectedChecks?.deliveryPromise ? extractDeliveryPromise(html) : null,
