@@ -83,6 +83,19 @@ popup 里贴 ASIN 列表、勾字段、填邮编，点开始即可。
 
 差评**默认关闭**：省约 40% 耗时，且必须登录才能拿到。
 
+### 路径覆盖（环境变量）
+
+所有可写路径默认基于 `$HOME`，**非 root 用户可直接用**。需要固定位置时用环境变量覆盖：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `AMZ_PROFILE` | `$HOME/.hermes/amazon-profile` | Chrome 持久 profile（登录态/邮编存这里） |
+| `AMZ_DOWNLOADS` | `$HOME/Downloads` | xlsx 输出目录 |
+| `AMZ_PORT` | `19222` | CDP 调试端口 |
+| `CHROME` | 自动探测 Playwright 的 Chromium | 指定浏览器可执行文件 |
+
+`scripts/setup.sh --check` 会校验这两个目录可写，提前暴露权限问题。
+
 ---
 
 ## 🔑 关于登录

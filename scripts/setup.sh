@@ -64,6 +64,27 @@ echo "== 6. 网络 =="
 CODE=$(timeout 10 curl -s -o /dev/null -w '%{http_code}' https://www.amazon.com/ 2>/dev/null)
 [ "$CODE" = "200" ] && ok "amazon.com 直连 200" || warn "amazon.com 返回 $CODE（代理? robot check?）"
 
+echo "== 7. 运行路径可写性（run.sh 的 PROFILE / DOWNLOADS）=="
+# 与 run.sh 保持同一套默认值：全部基于 $HOME，可用环境变量覆盖。
+# 非 root 用户下若这里不可写，run.sh 会在启动 Chromium 前就失败 —— 提前暴露。
+_RUN_PROFILE="${AMZ_PROFILE:-$HOME/.hermes/amazon-profile}"
+_RUN_DOWNLOADS="${AMZ_DOWNLOADS:-$HOME/Downloads}"
+for _d in "$_RUN_PROFILE" "$_RUN_DOWNLOADS"; do
+  if [ -d "$_d" ] && [ -w "$_d" ]; then
+    ok "$_d 可写"
+  elif mkdir -p "$_d" 2>/dev/null && [ -w "$_d" ]; then
+    ok "$_d 已创建且可写"
+  else
+    bad "$_d 不可写（用户 $(id -un)）→ 用 AMZ_PROFILE / AMZ_DOWNLOADS 指向可写目录"
+  fi
+done
+if [ "$(id -u)" != "0" ]; then
+  case "$_RUN_PROFILE" in
+    /root/*) bad "PROFILE 指向 /root 但当前非 root 用户 → 设 AMZ_PROFILE 或在 run.sh 里改用 \$HOME";;
+    *) ok "非 root 用户（$(id -un)）路径配置正常";;
+  esac
+fi
+
 echo
 echo "结果: $PASS 通过, $FAIL 失败, $WARN 警告"
 [ "$FAIL" -eq 0 ] && echo "环境就绪 → $SCRIPT_DIR/run.sh \"B0XXXXXXX\" --no-reviews --feishu"

@@ -83,6 +83,19 @@ Paste ASINs, tick the fields, set a zip code, hit start.
 
 Critical reviews are **off by default**: they cost ~40% more time and need a session.
 
+### Path overrides (environment variables)
+
+All writable paths default to `$HOME`, so **non-root users work out of the box**. Override with env vars to pin them elsewhere:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AMZ_PROFILE` | `$HOME/.hermes/amazon-profile` | Chrome persistent profile (session, zip) |
+| `AMZ_DOWNLOADS` | `$HOME/Downloads` | where the xlsx files land |
+| `AMZ_PORT` | `19222` | CDP debugging port |
+| `CHROME` | auto-detected Playwright Chromium | browser executable |
+
+`scripts/setup.sh --check` verifies both directories are writable, so permission problems surface early.
+
 ---
 
 ## 🔑 About signing in

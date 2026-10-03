@@ -9,7 +9,7 @@
 └────┬────┘   └──────────┬───────────┘   │  check-extension/)  │
      │ CDP over WS       │               └─────────┬───────────┘
      ▼                   │ tabs/scripting/downloads ▼
- drive.mjs ◀── runner.html 消息路由      Amazon.com → /root/Downloads/*.xlsx
+ drive.mjs ◀── runner.html 消息路由      Amazon.com → $HOME/Downloads/*.xlsx
 ```
 
 ## 为什么需要 runner
@@ -74,7 +74,7 @@ apt-get install -y libatk-bridge2.0-0
 | `--fresh-profile` | 删除持久 profile 冷启动（慎用，会丢邮编/登录态） |
 
 产物：
-- `/root/Downloads/amazon-listing-check-<时间>.xlsx`
+- `$HOME/Downloads/amazon-listing-check-<时间>.xlsx`
 - `/tmp/amz-last-run.json`（机器可读结果）
 
 退出码：`0` 至少 1 个成功 / `1` 链路错误 / `2` 全部失败 / `3` 差评模式未登录。
@@ -172,15 +172,15 @@ Chrome 154 上实测踩过）。`--disable-features=DisableLoadExtensionCommandL
 
 ```bash
 apt-get install -y xvfb x11vnc novnc
-x11vnc -storepasswd '一次性密码' /root/.vnc-auth.enc   # 必须是加密格式，明文会 password check failed
+x11vnc -storepasswd '一次性密码' $HOME/.vnc-auth.enc   # 必须是加密格式，明文会 password check failed
 Xvfb :99 -screen 0 1280x900x24 &
-x11vnc -display :99 -rfbauth /root/.vnc-auth.enc -noxdamage -repeat -forever -shared &
+x11vnc -display :99 -rfbauth $HOME/.vnc-auth.enc -noxdamage -repeat -forever -shared &
 websockify --web /usr/share/novnc 8788 localhost:5900 &
 cloudflared tunnel --url http://127.0.0.1:8788 &       # 输出临时公网 URL
 
 # 完整版 Chrome（非 headless）+ 持久 profile：
-/root/.cache/ms-playwright/chromium-*/chrome-linux*/chrome \   # 版本号按实际安装的为准
-  --no-sandbox --user-data-dir=/root/.hermes/amazon-profile \
+$HOME/.cache/ms-playwright/chromium-*/chrome-linux*/chrome \   # 版本号按实际安装的为准
+  --no-sandbox --user-data-dir=$HOME/.hermes/amazon-profile \
   --display=:99 "https://www.amazon.com/ap/signin?openid.return_to=https%3A%2F%2Fwww.amazon.com%2F"
 
 # 用户在手机浏览器打开 https://<随机>.trycloudflare.com/vnc.html 亲手登录

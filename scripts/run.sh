@@ -18,13 +18,19 @@
 #     --image-proxy hp:port 图片 CDN 改走本地代理（默认不用——扩展自带 CDN 域名回退，
 #                        仅在连备用 CDN 域名也取不到时才需要）
 #
+# 可用环境变量覆盖默认路径（默认全部基于 $HOME，非 root 用户可直接用）:
+#   AMZ_PROFILE    Chrome 持久 profile 目录（默认 $HOME/.hermes/amazon-profile）
+#   AMZ_DOWNLOADS  xlsx 输出目录（默认 $HOME/Downloads）
+#   AMZ_PORT       CDP 调试端口（默认 19222）
+#   CHROME         指定 Chromium/Chrome 可执行文件
+#
 # 退出码: 0=至少1个ASIN成功  1=链路错误  2=全部ASIN失败  3=差评模式但未登录
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 
 ASINS="${1:-}"
-if [ -z "$ASINS" ] || [[ "$ASINS" == --* ]]; then sed -n '4,19p' "$0"; exit 1; fi
+if [ -z "$ASINS" ] || [[ "$ASINS" == --* ]]; then sed -n '4,27p' "$0"; exit 1; fi
 shift
 
 ZIP=10010; DELAY=1200; REVIEWS=""; RETRY=""; FEISHU=""
@@ -54,9 +60,27 @@ done
 
 CHROME="${CHROME:-$(ls -d "${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1)}"
 EXT="$SKILL_DIR/assets/extension"
-PROFILE=/root/.hermes/amazon-profile
-PORT=19222
+# 全部可写路径都基于 $HOME，别写死 /root —— 非 root 用户下会直接 Permission denied。
+# 需要固定位置时显式传环境变量覆盖。
+PROFILE="${AMZ_PROFILE:-$HOME/.hermes/amazon-profile}"
+DOWNLOADS="${AMZ_DOWNLOADS:-$HOME/Downloads}"
+PORT="${AMZ_PORT:-19222}"
 PORT_PID_FILE="${TMPDIR:-/tmp}/amz-chrome-$PORT.pid"
+
+# 早失败：把「目录不可写」这类问题在启动 Chromium 之前就报清楚，
+# 否则表现为 Chrome 起不来 / 任务全失败，很难定位到是路径权限问题。
+for _dir in "$PROFILE" "$DOWNLOADS"; do
+  if ! mkdir -p "$_dir" 2>/dev/null; then
+    echo "错误：无法创建目录 $_dir（当前用户 $(id -un)，HOME=$HOME）" >&2
+    echo "      可用 AMZ_PROFILE / AMZ_DOWNLOADS 环境变量指定到可写位置。" >&2
+    exit 1
+  fi
+  if [ ! -w "$_dir" ]; then
+    echo "错误：目录不可写 $_dir（当前用户 $(id -un)）" >&2
+    echo "      可用 AMZ_PROFILE / AMZ_DOWNLOADS 环境变量指定到可写位置。" >&2
+    exit 1
+  fi
+done
 
 [ -x "$CHROME" ] || { echo "缺 Chromium，先跑: $SCRIPT_DIR/setup.sh"; exit 1; }
 [ -d "$EXT" ] || { echo "缺扩展目录 $EXT，先跑 setup.sh"; exit 1; }
@@ -228,7 +252,6 @@ with open(sys.argv[1], 'w') as handle:
             handle.write(str(name) + chr(10))
 " "$XLSX_LIST_FILE")"
 
-DOWNLOADS=/root/Downloads
 echo "XLSX:"
 while IFS= read -r name; do
   [ -n "$name" ] && echo "  $DOWNLOADS/$name"

@@ -64,21 +64,21 @@ clone 后目录直接就是 skill 根（SKILL.md 在顶层），无需再嵌套�
 ```
 - **差评默认关**；`--with-reviews` 才开且强制登录态检测
 - `--retry N`（默认 1）：失败 ASIN（如偶发"标签页加载超时"）自动补跑
-- 输出 `XLSX=/root/Downloads/amazon-listing-check-*.xlsx`；机器可读结果 `/tmp/amz-last-run.json`（字段：success/failed/failures/rows/mainXlsx/retryXlsx/retriedSuccess）
+- 输出 `XLSX=$HOME/Downloads/amazon-listing-check-*.xlsx`；机器可读结果 `/tmp/amz-last-run.json`（字段：success/failed/failures/rows/mainXlsx/retryXlsx/retriedSuccess）
 - 退出码：0 至少1个成功 / 1 链路错误 / 2 全部失败 / 3 差评模式未登录
 
 **4. 验证产物**（严谨要求）：xlsx 用 openpyxl 打开核对行数=ASIN 数、表头列齐（差评关 16 列 / 开 17 列）：
 ```bash
-python3 -c "import openpyxl; ws=openpyxl.load_workbook('/root/Downloads/<文件>').active; [print([str(c)[:40] if c else '' for c in r]) for r in ws.iter_rows(values_only=True)]"
+python3 -c "import openpyxl; ws=openpyxl.load_workbook('$HOME/Downloads/<文件>').active; [print([str(c)[:40] if c else '' for c in r]) for r in ws.iter_rows(values_only=True)]"
 ```
 
 **5. 交付（硬性规则）**：
-- **用户没选 --feishu → agent 必须在回复中直接把 xlsx 作为文件交付**（Ekko 场景写 `MEDIA:/root/Downloads/<文件>`；其他平台用对应的文件引用格式），不许只报路径
+- **用户没选 --feishu → agent 必须在回复中直接把 xlsx 作为文件交付**（Ekko 场景写 `MEDIA:$HOME/Downloads/<文件>`；其他平台用对应的文件引用格式），不许只报路径
 - 用户选了 --feishu → run.sh 已自动发送并打印 message_id，回复里报数即可（成功N失败M+message_id），不必重复发文件
 
 ## 性能与策略（实测 2026-09-22/23）
 - 单 ASIN 全检查（含差评）40–80s；差评关约 25–35s
-- 持久 profile（/root/.hermes/amazon-profile）省邮编重设 ~40s/批 + cookie 温热降 robot 风险
+- 持久 profile（$HOME/.hermes/amazon-profile）省邮编重设 ~40s/批 + cookie 温热降 robot 风险
 - 偶发"标签页加载超时"瞬时失败 → --retry 1 自动补跑解决
 - 批量建议 delay ≥ 1000ms；不并行多实例（robot 风险 + 内存）
 - 纯 HTTP 抓取会被 edgex/guard 反爬拦截（实测），必须走完整 Chromium
@@ -107,22 +107,27 @@ python3 -c "import openpyxl; ws=openpyxl.load_workbook('/root/Downloads/<文件>
     - 兜底：`run.sh --image-proxy <host:port>` 可把 `*.media-amazon.com` 交给本地代理（PAC 经 HTTP 提供，`--proxy-pac-url=file://` 实测被 Chrome 静默忽略）；仅在连备用 CDN 域名也取不到时才需要。
 17. **图片负缓存毒化（详情图整批归零，比缺图更隐蔽）**：`fetchListingImage` 原来把 `fetchImageAsBase64` 的返回值**无条件**写缓存，失败返回的 `null` 也被缓存住且永不过期。Amazon 的 A+ 详情图常有一张**全店共用 banner**，于是某次瞬时抖动失败后，之后每个 ASIN 的同一 URL 都命中这个 null → 详情图成批归零，而行仍是 success。特征：**A图 全满、详情图从某一批起断崖式为零**，偶有批次部分恢复（缓存被 drain 后短暂自愈，随后再次毒化）。处置：缓存策略改到 `image-cache.js` 的 `loadImageIntoCache()`（**成功才写缓存**，失败返回 null 但不落盘，下次重试即自愈），并单测覆盖"一次抖动不毒化后续"。⚠️`image-cache.js` 原注释把负缓存写成"有意设计"，别再照着它改回去。
 18. **run.sh 里文件名列表绝不能流经 `eval`**：批量跑有几十个 xlsx 时，`XLSX_LIST="..."` 这条超长赋值穿过 `python -c "..."` → `$(...)` → `eval` 三层后引号会被吃掉，shell 把第二个文件名当命令执行（`command not found`），随后 `set -u` 下报 `XLSX_LIST: unbound variable`，退出码 1 —— **抓取其实全成功**，极易误判为任务失败。单个文件时不复现，小批量测试永远暴露不了。正确做法：文件名逐行写临时文件，shell 侧 `while IFS= read -r` 读。回归验证：抽脚本片段 + 伪造 60 文件名的报告，旧版 EXIT=1 / 新版 EXIT=0。
-19. **`run.sh` 报 `Inspected target navigated or closed`（本机实测根因）**：不是端口占用，是 `/root/.hermes/amazon-profile/` 下的 `SingletonLock` / `SingletonCookie` / `SingletonSocket` 残留（上次 Chrome 被强杀来不及删），下次启动 Chrome 以为已有实例在跑而异常退出，run.sh 的端口探测却误判成功。
+19. **`run.sh` 报 `Inspected target navigated or closed`（本机实测根因）**：不是端口占用，是 `$HOME/.hermes/amazon-profile/` 下的 `SingletonLock` / `SingletonCookie` / `SingletonSocket` 残留（上次 Chrome 被强杀来不及删），下次启动 Chrome 以为已有实例在跑而异常退出，run.sh 的端口探测却误判成功。
     **排查顺序：先清 Singleton，再看端口**（只看端口会漏判——端口 free 不代表锁干净）：
     ```bash
     ps -eo pid,cmd | grep "chrome-linux64/chrome" | grep -v grep | awk '{print $1}' | xargs -r kill -9
-    rm -f /root/.hermes/amazon-profile/Singleton{Lock,Cookie,Socket}
+    rm -f $HOME/.hermes/amazon-profile/Singleton{Lock,Cookie,Socket}
     ```
     实测：清锁前必挂，清锁后 405/405 通过。别用 `--fresh-profile`（会丢登录态和邮编）。
     **别把手动起的 Chrome 留在后台** —— 它正是下一次失败的来源。
 20. **增量交付时记得补时间列**：用户要的"抓取时间"是批导出时刻（扩展只在每批导出打时间戳，无行级时间）。用文件名里的 UTC 时间戳转 UTC+8，并加"批次"列。合并多批 xlsx 时注意**重试批会产出重复 ASIN**，需跨批去重（不是批内）。
 
-21. **Fitment（Amazon Confirmed Fit 区块）采集**（2026-10-01 新增）：汽车配件页左上角的适配卡片，输出「车型 | 相符/不相符」，没有该区块的 listing 留空。
+21. **Fitment Bar（页面左上角 Amazon Confirmed Fit 区块）有无检测**（2026-10-01）：只要二值判断，输出 **「有」/「无」**，不采车型、不判相符 —— 适配状态是相对页面当前选中的那辆车，换车就变，不是 listing 的固有属性。
     **判定绝不能搜 `partfinder` 关键字**：那段 CSS 类名在没有该区块的页面里一样存在（实测 43 处），会把所有 ASIN 都误判成「有」。必须用已渲染 widget 上的 `data-component-id="automotive-pf-primary-view"` —— 实测该标记在有区块的页面出现 1 次、无区块的页面 0 次，判别干净。
-    车辆名取该 widget 后 4000 字符内第一个 `.a-button-text`；状态看是否有 `id="automotive-pf-primary-view-no-this-does-not-fit-message"`。
-    **新增一个检查项要改四处，漏一处就静默不生效**（本次踩过：只改了 parser 和 export-plan，列没出来）：
+    **这一列有意对缺失也输出「无」而不是留空**：留空会和"没跑这项检查"混淆。
+    **新增一个检查项要改四处，漏一处就静默不生效**（踩过：只改了 parser + export-plan，列根本没出来）：
     `amazon-parser.js` 的 `extractAmazonListingChecks` → `export-plan.js` 的 `EXPORT_COLUMNS`（`check` 字段即开关名）→ `task-state.js` 的 `CHECK_KEYS` 白名单与 `recordTaskSuccess` 字段 → `drive.mjs` 的 `CHECKS` 与 `popup.html/js`。
-    另：改完扩展必须 bump manifest version 并清 `PROFILE/Default/Service Worker`（见第 13 条），否则跑的还是旧模块、新列不出现。
+    另：改完扩展必须 bump manifest version 并清 `$PROFILE/Default/Service Worker`（见第 13 条），否则跑的还是旧模块、新列不出现。还有 `deepStrictEqual` 断言会因新增字段打挂，用"未启用时该字段完全不出现"（条件展开）规避，别塞 null/undefined。
+
+22. **脚本里不要硬编码 `/root`**（2026-10-03，外部用户反馈）：非 root 用户下 `PROFILE=/root/.hermes/amazon-profile` 会 `mkdir: Permission denied`、`DOWNLOADS=/root/Downloads` 会让产物路径显示错误（Chrome 实际把文件存到用户自己的 `~/Downloads`，脚本却打印 `/root/Downloads`，用户根本找不到文件）。还会导致 profile 无法持久化（Chrome 退化到临时 profile，登录态/邮编每次都丢）。
+    **规则**：所有可写路径一律基于 `$HOME`，需要固定位置时用环境变量覆盖。`run.sh` 现有 `AMZ_PROFILE` / `AMZ_DOWNLOADS` / `AMZ_PORT` 三个覆盖点；`setup.sh --check` 第 7 节会校验这两个目录可写。
+    注意 `set -u` 没有 `set -e`，`mkdir -p` 失败**不会中断脚本**，所以症状可能是"能跑但路径全错"，而不是直接报错——更隐蔽。
+    验证方式：`useradd -m tester`，把仓库与 Chromium 放到其可读路径，`su - tester` 实跑一次。
 
 ## 扩展单独人工使用（不跑无头链路时）
 
