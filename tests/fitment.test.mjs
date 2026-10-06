@@ -15,7 +15,7 @@ const MARKER = 'data-component-id="automotive-pf-primary-view"';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // 真实页面样本存在仓库里，测试不依赖 /tmp（否则重跑或换机器就会 skip）。
-// present: B0FXLS6B64（有该区块）  absent: B0HLDZ4H6Y（没有）
+// present: B00FLYWNYQ（有该区块）  absent: B07FZ8S74R（没有）
 const HAS_FIT = path.join(HERE, "fixtures", "fitment-present.html");
 const NO_FIT = path.join(HERE, "fixtures", "fitment-absent.html");
 const hasSample = fs.existsSync(HAS_FIT) ? fs.readFileSync(HAS_FIT, "utf8") : "";

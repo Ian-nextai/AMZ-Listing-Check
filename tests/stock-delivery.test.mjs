@@ -15,11 +15,11 @@ const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fix
 const readFixture = (name) => fs.readFileSync(path.join(fixturesDir, name), "utf8");
 
 // Captured from live amazon.com listings via a signed-in session (US zip 10010).
-const IN_STOCK = readFixture("stock-in-stock.html");       // B0CKWX6W1L
-const UNAVAILABLE = readFixture("stock-unavailable.html"); // B0FK27RC39
+const IN_STOCK = readFixture("stock-in-stock.html");       // B07FZ8S74R
+const UNAVAILABLE = readFixture("stock-unavailable.html"); // B0D1XD1ZV3
 // A merchant-fulfilled listing whose offer slot renders the label
 // "Shipper / Seller" instead of a name.
-const PLACEHOLDER_SELLER = readFixture("stock-placeholder-seller.html"); // B0GT4L22S2
+const PLACEHOLDER_SELLER = readFixture("stock-placeholder-seller.html"); // B09B8V1LZ3
 
 // Guards every stock assertion: the unavailable listing's #availability holds a
 // <script>, so a naive textContent read would export JavaScript as the stock value.
@@ -164,7 +164,7 @@ test("extractFulfilmentRoute falls back to the seller when there is no fulfiller
   assert.equal(extractFulfilmentRoute(sellerOnly), "Ships from czyaoshan");
 });
 
-// The B0GT4L22S2 listing renders these placeholders instead of a name; writing
+// The B09B8V1LZ3 listing renders these placeholders instead of a name; writing
 // either of them into the cell would be inventing data.
 test("extractFulfilmentRoute rejects placeholder labels", () => {
   for (const label of ["Shipper / Seller", "Ships from", "Sold by", "Learn more about the seller", "-"]) {
@@ -180,7 +180,7 @@ test("extractFulfilmentRoute returns empty when the Buy Box has no offer", () =>
   assert.equal(extractFulfilmentRoute(UNAVAILABLE), "");
 });
 
-// The real B0GT4L22S2 page renders no fulfiller slot and shows "Shipper / Seller"
+// The real B09B8V1LZ3 page renders no fulfiller slot and shows "Shipper / Seller"
 // as the label; the seller name lives in the sibling text node, whose embedded
 // state carries this listing's own asin, so it is the correct answer here.
 test("extractFulfilmentRoute uses the seller when the listing has no fulfiller slot", () => {
@@ -224,7 +224,7 @@ test("an unchecked new column leaves the exported workbook unchanged", () => {
 test("the new columns carry their values into the row", () => {
   const rows = buildWorksheetRows(
     [{
-      asin: "B0CKWX6W1L",
+      asin: "B07FZ8S74R",
       status: "success",
       stockStatus: "In Stock",
       deliveryPromise: "普通用户: Saturday, September 26\nPrime: Today 6 PM - 11 PM",
@@ -241,7 +241,7 @@ test("the new columns carry their values into the row", () => {
 
 test("absent new fields export as blank without failing the row", () => {
   const rows = buildWorksheetRows(
-    [{ asin: "B0FK27RC39", status: "success", error: "", stockStatus: "", deliveryPromise: "", fulfilmentRoute: "" }],
+    [{ asin: "B0D1XD1ZV3", status: "success", error: "", stockStatus: "", deliveryPromise: "", fulfilmentRoute: "" }],
     CHECKS_ALL
   );
 

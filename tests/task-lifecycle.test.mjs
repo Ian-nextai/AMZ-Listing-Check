@@ -107,7 +107,7 @@ async function loadBackground() {
   return import(`../assets/extension/background.js?case=${moduleCounter}`);
 }
 
-const ASINS = ["B0CKWX6W1L", "B00FRRXO0Y", "B0D1XD1ZV3"];
+const ASINS = ["B07FZ8S74R", "B09B8V1LZ3", "B08KTZ8249"];
 
 test("a new task can start immediately after discarding a running one", async () => {
   const { send } = installFakeChrome();
@@ -121,13 +121,13 @@ test("a new task can start immediately after discarding a running one", async ()
   assert.equal(discard.ok, true);
 
   // The regression: this used to be rejected with "已有任务在运行。"
-  const second = await send("start-new-task", { asins: ["B0FK27RC39"], checks: { title: true }, delayMs: 200 });
+  const second = await send("start-new-task", { asins: ["B0D1XD1ZV3"], checks: { title: true }, delayMs: 200 });
   assert.equal(second.ok, true, "starting a task right after discard must be accepted");
   await sleep(250);
 
   const state = await send("get-status");
   assert.equal(state.status, "running");
-  assert.deepEqual(state.task.allAsins, ["B0FK27RC39"]);
+  assert.deepEqual(state.task.allAsins, ["B0D1XD1ZV3"]);
 });
 
 test("an abandoned run cannot overwrite the task that replaced it", async () => {
@@ -138,14 +138,14 @@ test("an abandoned run cannot overwrite the task that replaced it", async () => 
   await sleep(250);
   await send("discard-task");
 
-  await send("start-new-task", { asins: ["B0BSHF7WHW"], checks: { title: true }, delayMs: 200 });
+  await send("start-new-task", { asins: ["B0D1XD1ZV3"], checks: { title: true }, delayMs: 200 });
   await sleep(250);
 
   // Give the abandoned loop time to finish its in-flight ASIN and try to write.
   await sleep(3000);
 
   const state = await send("get-status");
-  assert.deepEqual(state.task.allAsins, ["B0BSHF7WHW"]);
+  assert.deepEqual(state.task.allAsins, ["B0D1XD1ZV3"]);
   assert.equal(state.status, "running");
 });
 
@@ -275,7 +275,7 @@ test("starting a task right after a finished one purges its result keys", async 
   assert.ok(resultKeysOf(store).length > 0, "a finished run must have written result keys");
 
   // 这条路径不经过 clearTask —— 它只覆盖 task 键，不清前缀键。
-  await send("start-new-task", { asins: ["B0FK27RC39"], checks: { title: true }, delayMs: 50 });
+  await send("start-new-task", { asins: ["B0D1XD1ZV3"], checks: { title: true }, delayMs: 50 });
 
   const stale = ASINS.map((asin) => `${RESULT_PREFIX}${asin}`);
   assert.deepEqual(resultKeysOf(store).filter((key) => stale.includes(key)), [],

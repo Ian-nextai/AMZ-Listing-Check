@@ -133,7 +133,7 @@ handles both:
 
 ### Live verification (critical reviews)
 
-Verified against the live reviews page for B0CKWX6W1L while signed in, using the
+Verified against the live reviews page for B07FZ8S74R while signed in, using the
 extension's own `extractCriticalReviews` module:
 
 - 191 critical reviews available for the ASIN; **30 collected** (1★×9, 2★×6, 3★×15)
@@ -179,8 +179,8 @@ endpoint fix in place:
 
 | ASIN | Seller | Add To Cart | Notes |
 | --- | --- | --- | --- |
-| B0CKWX6W1L | Marsram | true | highlight + 6 BP + both images |
-| B00FRRXO0Y | U.S. Based seller | true | no highlight on this listing |
-| B0FK27RC39 | (blank) | false | no Buy Box on this listing; every other field present |
+| B07FZ8S74R | Marsram | true | highlight + 6 BP + both images |
+| B09B8V1LZ3 | U.S. Based seller | true | no highlight on this listing |
+| B0D1XD1ZV3 | (blank) | false | no Buy Box on this listing; every other field present |
 
 Export: 3 rows, 6 embedded JPEGs anchored at columns I and J.

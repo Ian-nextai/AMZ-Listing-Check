@@ -11,13 +11,13 @@ import {
 } from "../assets/extension/src/core/task-state.js";
 
 test("task flow tracks remaining items and success summary", () => {
-  let task = createTask(["B0FYP69KJD", "B012345678"], {
+  let task = createTask(["B07XJ8C8F5", "B012345678"], {
     title: true,
     bulletPoints: true,
     seller: true
   });
 
-  task = recordTaskSuccess(task, "B0FYP69KJD", {
+  task = recordTaskSuccess(task, "B07XJ8C8F5", {
     title: "Engine Coolant Temperature Sensor",
     bulletPoints: ["Fitment one"],
     sellerName: "U.S. Based seller"
@@ -31,14 +31,14 @@ test("task flow tracks remaining items and success summary", () => {
     failed: 1,
     remaining: 0
   });
-  assert.equal(task.resultsByAsin.B0FYP69KJD.status, "success");
+  assert.equal(task.resultsByAsin.B07XJ8C8F5.status, "success");
   assert.equal(task.resultsByAsin.B012345678.error, "Robot Check");
 });
 
 test("recordTaskSuccess stores the collected listing fields", () => {
-  let task = createTask(["B0CKWX6W1L"], { title: true, rating: true, imageA: true, imageDetail: true });
+  let task = createTask(["B07FZ8S74R"], { title: true, rating: true, imageA: true, imageDetail: true });
 
-  task = recordTaskSuccess(task, "B0CKWX6W1L", {
+  task = recordTaskSuccess(task, "B07FZ8S74R", {
     title: "Marsram Ignition Coil Pack",
     titleHighlight: "Double Iridium Spark Plug 4912",
     ratingValue: "4.5",
@@ -50,7 +50,7 @@ test("recordTaskSuccess stores the collected listing fields", () => {
     imageDetailData: null
   });
 
-  const record = task.resultsByAsin.B0CKWX6W1L;
+  const record = task.resultsByAsin.B07FZ8S74R;
   assert.equal(record.title, "Marsram Ignition Coil Pack");
   assert.equal(record.titleHighlight, "Double Iridium Spark Plug 4912");
   assert.equal(record.ratingValue, "4.5");

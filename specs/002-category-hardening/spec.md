@@ -6,7 +6,7 @@
 
 **Status**: Implemented
 
-**Input**: User description: "需要加一个字段，产品大类 —— 页面左上角红框处，比如 B0CGBXTMRS 是 Automotive，B0HJBCX8VS 是 Apple Products。后面这种不好查的，久留空。"
+**Input**: User description: "需要加一个字段，产品大类 —— 页面左上角红框处，比如 B07XJ8C8F5 是 Automotive，B00FLYWNYQ 是 Apple Products。后面这种不好查的，久留空。"
 
 ## Context
 
@@ -19,10 +19,10 @@ Live probing established the three cases that matter:
 
 | Listing | Kind | `#nav-subnav` | Expected category |
 | --- | --- | --- | --- |
-| B0CGBXTMRS | Automotive parts | present | `Automotive` |
-| B0HJBCX8VS | Apple Watch | present | `Apple Products` |
+| B07XJ8C8F5 | Automotive parts | present | `Automotive` |
+| B00FLYWNYQ | Apple Watch | present | `Apple Products` |
 | 0735211299 | Book (Atomic Habits) | **absent** | *(blank)* |
-| B08FHBV4ZX | Book (Project Hail Mary) | **absent** | *(blank)* |
+| B07FZ8S74R | Book (Project Hail Mary) | **absent** | *(blank)* |
 
 The department store tab lives in the page's own sub-navigation bar, which Amazon
 renders only for physical-goods departments. Books, Kindle and similar digital
@@ -100,7 +100,7 @@ value, not the decoy's.
 
 - **SC-001**: A book ASIN exports as `success` with a blank `Category` cell, verified
   against a real captured page.
-- **SC-002**: `B0CGBXTMRS` exports `Automotive` and `B0HJBCX8VS` exports
+- **SC-002**: `B07XJ8C8F5` exports `Automotive` and `B00FLYWNYQ` exports
   `Apple Products`, verified against live pages.
 - **SC-003**: A decoy earlier anchor does not change the extracted value.
 - **SC-004**: The full suite passes with no regression to previously collected fields.

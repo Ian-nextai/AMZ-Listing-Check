@@ -57,7 +57,7 @@ apt-get install -y libatk-bridge2.0-0
 ### 4. 跑任务
 
 ```bash
-./scripts/run.sh "B0GY48WL28,B0GY49QL6C" [选项]
+./scripts/run.sh "B09B8V1LZ3,B00FLYWNYQ" [选项]
 ```
 
 | 选项 | 说明 |
@@ -86,10 +86,10 @@ apt-get install -y libatk-bridge2.0-0
 管理是 Windows 专属的。
 
 ```powershell
-.\scripts\run.ps1 "B0GY48WL28,B0GY49QL6C"
-.\scripts\run.ps1 "B0GY48WL28" -WithReviews -Chunk 8 -MaxImageEdge 512
-.\scripts\run.ps1 "B0GY48WL28" -CheckLogin
-.\scripts\run.ps1 "B0GY48WL28" -Login        # 打印人工登录指引
+.\scripts\run.ps1 "B09B8V1LZ3,B00FLYWNYQ"
+.\scripts\run.ps1 "B09B8V1LZ3" -WithReviews -Chunk 8 -MaxImageEdge 512
+.\scripts\run.ps1 "B09B8V1LZ3" -CheckLogin
+.\scripts\run.ps1 "B09B8V1LZ3" -Login        # 打印人工登录指引
 ```
 
 参数与 `run.sh` 的选项一一对应（`-Zip` `-Delay` `-MaxImageEdge` `-WithReviews`

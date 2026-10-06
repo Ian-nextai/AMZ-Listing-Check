@@ -38,7 +38,7 @@ return imageCache.get(target);
 
 下载失败时 `fetchImageAsBase64` 返回 `null`，**这个 `null` 被原样写入 `imageCache`**，形成**无过期时间的负缓存**。
 
-而 Amazon 的 A+ 详情图里常有一张**全店共用的 banner**。实测 6 个 ENA 商品中 5 个共用同一个资源 ID：
+而 Amazon 的 A+ 详情图里常有一张**全店共用的 banner**。实测 6 个同品牌商品中 5 个共用同一个资源 ID：
 
 ```
 aplus-media-library-service-media/93650185-1a3e-4d7c-a53c-79b3e0be454c

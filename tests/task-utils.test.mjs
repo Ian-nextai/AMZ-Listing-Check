@@ -10,12 +10,12 @@ import {
 test("normalizeAsins trims, uppercases, extracts ASINs, and removes duplicates", () => {
   assert.deepEqual(
     normalizeAsins([
-      "B0FYP69KJD",
-      " https://www.amazon.com/dp/b0fyp69kjd ",
+      "B07XJ8C8F5",
+      " https://www.amazon.com/dp/b07xj8c8f5 ",
       "asin: b012345678",
       "bad-value"
     ]),
-    ["B0FYP69KJD", "B012345678"]
+    ["B07XJ8C8F5", "B012345678"]
   );
 });
 

@@ -96,13 +96,13 @@ test("the three columns land next to the rating columns in the export", () => {
 test("a row exports the captured values and blanks stay blank", () => {
   const results = [
     {
-      asin: "B002Y37M0W",
+      asin: "B08KTZ8249",
       price: extractPrice(WITH_DISCOUNT),
       coupon: extractCoupon(WITH_DISCOUNT),
       discount: extractDiscount(WITH_DISCOUNT)
     },
     {
-      asin: "B0FMQXFWH3",
+      asin: "B0BSHF7WHW",
       price: extractPrice(WITH_COUPON),
       coupon: extractCoupon(WITH_COUPON),
       discount: extractDiscount(WITH_COUPON)

@@ -90,24 +90,24 @@ test("extractCriticalReviews handles both page layouts in one document", () => {
 
 test("buildCriticalReviewsUrl splices the asin into the portal reviews url", () => {
   assert.equal(
-    buildCriticalReviewsUrl("B0CKWX6W1L"),
-    "https://www.amazon.com/portal/customer-reviews/B0CKWX6W1L/ref=cm_cr_getr_d_show_all?reviewerType=all_reviews&filterByStar=critical#reviews-filter-bar"
+    buildCriticalReviewsUrl("B07FZ8S74R"),
+    "https://www.amazon.com/portal/customer-reviews/B07FZ8S74R/ref=cm_cr_getr_d_show_all?reviewerType=all_reviews&filterByStar=critical#reviews-filter-bar"
   );
 });
 
 test("buildCriticalReviewsUrl upper-cases the asin and rejects empty input", () => {
-  assert.match(buildCriticalReviewsUrl("b0ckwx6w1l"), /customer-reviews\/B0CKWX6W1L\//);
+  assert.match(buildCriticalReviewsUrl("b07fz8s74r"), /customer-reviews\/B07FZ8S74R\//);
   assert.equal(buildCriticalReviewsUrl(""), "");
 });
 
 test("buildAllReviewsUrl targets the unfiltered reviews page", () => {
-  assert.match(buildAllReviewsUrl("B0CKWX6W1L"), /customer-reviews\/B0CKWX6W1L\/ref=cm_cr_dp_d_show_all_top/);
+  assert.match(buildAllReviewsUrl("B07FZ8S74R"), /customer-reviews\/B07FZ8S74R\/ref=cm_cr_dp_d_show_all_top/);
 });
 
 test("isSignInUrl detects the sign-in redirect and captcha page", () => {
   assert.equal(isSignInUrl("https://www.amazon.com/ap/signin?openid.return_to=x"), true);
   assert.equal(isSignInUrl("https://www.amazon.com/errors_page/validateCaptcha?x=1"), true);
-  assert.equal(isSignInUrl("https://www.amazon.com/dp/B0CKWX6W1L"), false);
+  assert.equal(isSignInUrl("https://www.amazon.com/dp/B07FZ8S74R"), false);
 });
 
 // A signed-in page embeds an /ap/signin link in its account hover tooltip, so
@@ -189,7 +189,7 @@ test("formatReviewEntry numbers the entry and joins its parts", () => {
 
 test("the 差评 column puts every review in one cell", () => {
   const result = {
-    asin: "B0CKWX6W1L",
+    asin: "B07FZ8S74R",
     status: "success",
     criticalReviews: extractCriticalReviews(MIXED_REVIEWS_HTML)
   };

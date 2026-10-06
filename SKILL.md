@@ -58,7 +58,7 @@ clone 后目录直接就是 skill 根（SKILL.md 在顶层），无需再嵌套�
 
 **3. 跑任务**（一条命令）：
 ```bash
-<skill目录>/scripts/run.sh "B0GY48WL28,B0GY49QL6C" [--zip 10010] [--delay 1200] \
+<skill目录>/scripts/run.sh "B09B8V1LZ3,B00FLYWNYQ" [--zip 10010] [--delay 1200] \
     [--with-reviews] [--retry 1] [--feishu] [--feishu-to <id>] [--id-type open_id] \
     [--fresh-profile] [--check-login]
 ```

@@ -16,7 +16,7 @@ is in stock, how many units remain, and when it would arrive.
 
 Live probing of two listings established which signals are actually available:
 
-| Signal | In-stock listing (B0CKWX6W1L) | Unavailable listing (B0FK27RC39) |
+| Signal | In-stock listing (B07FZ8S74R) | Unavailable listing (B0D1XD1ZV3) |
 | --- | --- | --- |
 | Stock text | `In Stock` in `#availability` | no availability node |
 | Delivery promise | `FREE delivery Saturday, September 26` | absent |

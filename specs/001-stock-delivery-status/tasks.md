@@ -32,7 +32,7 @@ This is a single-project browser extension, no build step:
 
 Probed against a signed-in session, US zip 10010. These drive the implementation:
 
-| Signal | Selector | In-stock (B0CKWX6W1L) | Unavailable (B0FK27RC39) |
+| Signal | Selector | In-stock (B07FZ8S74R) | Unavailable (B0D1XD1ZV3) |
 | --- | --- | --- | --- |
 | Stock | `#availability` | `In Stock` **and contains a `<script>`** | node present but script-only |
 | Delivery | `#mir-layout-DELIVERY_BLOCK` | `FREE delivery Saturday, September 26 …` | absent |
@@ -49,7 +49,7 @@ export JavaScript source as the stock value.
 
 **Purpose**: Fixtures and test scaffold that every story depends on
 
-- [ ] T001 Capture two settled-DOM fixtures and save them as `tests/fixtures/stock-in-stock.html` (from B0CKWX6W1L) and `tests/fixtures/stock-unavailable.html` (from B0FK27RC39), preserving the raw HTML including the `<script>` inside `#availability`
+- [ ] T001 Capture two settled-DOM fixtures and save them as `tests/fixtures/stock-in-stock.html` (from B07FZ8S74R) and `tests/fixtures/stock-unavailable.html` (from B0D1XD1ZV3), preserving the raw HTML including the `<script>` inside `#availability`
 - [ ] T002 Create `tests/stock-delivery.test.mjs` with a fixture loader that reads both files from `tests/fixtures/` using `node:fs`, importing `node:test` and `node:assert/strict` to match the existing test files
 
 ---
@@ -145,7 +145,7 @@ it leaves the cell blank and still succeeds.
 
 - [ ] T023 [P] Run `node --test tests/*.test.mjs` and confirm the whole suite is green with the new tests included
 - [ ] T024 Verify SC-003: with all three boxes unchecked, confirm the exported column set is byte-identical to the pre-feature layout by asserting `getActiveColumns` output against the existing `export-plan.test.mjs` expectations
-- [ ] T025 Verify the artifact: load `amazon-listing-check-extension/` in Chrome, run B0CKWX6W1L (in stock) and B0FK27RC39 (unavailable) with all three boxes ticked, then open the produced `.xlsx` from the downloads directory and confirm the stock cell distinguishes them and the unavailable row still shows `success` in `amazon-listing-check-extension/background.js`'s export
+- [ ] T025 Verify the artifact: load `amazon-listing-check-extension/` in Chrome, run B07FZ8S74R (in stock) and B0D1XD1ZV3 (unavailable) with all three boxes ticked, then open the produced `.xlsx` from the downloads directory and confirm the stock cell distinguishes them and the unavailable row still shows `success` in `amazon-listing-check-extension/background.js`'s export
 - [ ] T026 Bump `version` in `amazon-listing-check-extension/manifest.json` and rebuild `amazon-listing-check-extension.zip`
 
 ---

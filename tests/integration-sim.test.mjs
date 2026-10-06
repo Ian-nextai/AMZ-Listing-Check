@@ -55,9 +55,9 @@ test("simulated integration flow produces export-ready rows", () => {
     seller: true
   };
 
-  let task = createTask(["B0CKWX6W1L", "B012345678"], selectedChecks);
+  let task = createTask(["B07FZ8S74R", "B012345678"], selectedChecks);
   const extractedChecks = extractAmazonListingChecks(SAMPLE_SUCCESS_HTML, selectedChecks);
-  task = recordTaskSuccess(task, "B0CKWX6W1L", {
+  task = recordTaskSuccess(task, "B07FZ8S74R", {
     ...extractedChecks,
     imageAData: { base64: "AAAA", extension: "jpg" },
     imageDetailData: { base64: "BBBB", extension: "jpg" }
@@ -70,7 +70,7 @@ test("simulated integration flow produces export-ready rows", () => {
   assert.deepEqual(rows, [
     ["ASIN", "Status", "Error", "Title", "Highlight", "Rating", "Rating Count", "BP", "A图", "详情图", "Category", "Add To Cart", "Seller"],
     [
-      "B0CKWX6W1L", "success", "", "Marsram Ignition Coil Pack UF596", "Double Iridium Spark Plug 4912",
+      "B07FZ8S74R", "success", "", "Marsram Ignition Coil Pack UF596", "Double Iridium Spark Plug 4912",
       "4.5", "3498", "Fitment one\nFitment two", "", "", "Automotive", "true", "U.S. Based seller"
     ],
     ["B012345678", "failed", "遇到 Amazon Robot Check 页面。", "", "", "", "", "", "", "", "", "", ""]

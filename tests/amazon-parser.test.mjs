@@ -118,7 +118,7 @@ const NO_BUY_BOX_HTML = `
   <ul><li><span class="a-list-item">Fitment one</span></li></ul>
 </div>
 <div id="titleSection">
-  <h1 id="title"><span id="productTitle">ENA Ignition Coil 84005272</span></h1>
+  <h1 id="title"><span id="productTitle">Example Ignition Coil 84005272</span></h1>
 </div>
 <div id="acrPopover" title="4.6 out of 5 stars"></div>
 <span id="acrCustomerReviewText">(9)</span>
@@ -184,7 +184,7 @@ const GALLERY_HTML = `
   <script type="text/javascript">
     P.when('A').execute(function(A) {
       'colorImages': { 'initial': A.$.parseJSON('[{"hiRes":"https://m.media-amazon.com/images/I/61SUj2aKoEL._AC_SL1500_.jpg","large":"https://m.media-amazon.com/images/I/41aaaaaaa_L._AC_.jpg","main":{"https://m.media-amazon.com/images/I/61SUj2aKoEL._AC_SX679_.jpg":[679,679]}},{"hiRes":"https://m.media-amazon.com/images/I/611pEx7220L._AC_SL1500_.jpg","large":"https://m.media-amazon.com/images/I/41bbbbbbb_L._AC_.jpg"}]') },
-      'colorToAsin': {'asin':'B0D1XD1ZV3'}
+      'colorToAsin': {'asin':'B08KTZ8249'}
     });
   </script>
   <div id="altImages" class="a-fixed-left-grid-col a-col-left">
@@ -263,7 +263,7 @@ test("a listing without a Buy Box still yields every other field", () => {
 
   const extracted = extractAmazonListingChecks(NO_BUY_BOX_HTML, checks);
 
-  assert.equal(extracted.title, "ENA Ignition Coil 84005272");
+  assert.equal(extracted.title, "Example Ignition Coil 84005272");
   assert.equal(extracted.ratingValue, "4.6");
   assert.equal(extracted.ratingCount, "9");
   assert.deepEqual(extracted.bulletPoints, ["Fitment one"]);

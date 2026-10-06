@@ -8,7 +8,7 @@
   drive.mjs / cdp.mjs / check-login.mjs 本身就跨平台，直接复用。
 
 .EXAMPLE
-  .\scripts\run.ps1 "B0GY48WL28,B0GY49QL6C"
+  .\scripts\run.ps1 "B09B8V1LZ3,B00FLYWNYQ"
   .\scripts\run.ps1 "B0XXXXXXXX" -WithReviews -Chunk 8 -MaxImageEdge 512
   .\scripts\run.ps1 "B0XXXXXXXX" -CheckLogin
   .\scripts\run.ps1 "B0XXXXXXXX" -Login      # 打印人工登录指引

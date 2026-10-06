@@ -23,7 +23,7 @@ const ALL_CHECKS = {
 
 const SAMPLE_RESULTS = [
   {
-    asin: "B0FYP69KJD",
+    asin: "B07XJ8C8F5",
     status: "success",
     error: "",
     title: "Engine Coolant Temperature Sensor",
@@ -54,7 +54,7 @@ test("buildWorksheetRows emits every selected column in a stable order", () => {
   ]);
 
   assert.deepEqual(rows[1], [
-    "B0FYP69KJD", "success", "", "Engine Coolant Temperature Sensor",
+    "B07XJ8C8F5", "success", "", "Engine Coolant Temperature Sensor",
     "Double Iridium Spark Plug 4912", "4.5", "3498",
     "Fitment one\nFitment two", "", "", "Automotive", "true", "U.S. Based seller"
   ]);
@@ -73,7 +73,7 @@ test("buildWorksheetRows drops unselected columns entirely", () => {
 
   assert.deepEqual(rows[0], ["ASIN", "Status", "Error", "Title", "Rating", "Rating Count", "A图"]);
   assert.deepEqual(rows[1], [
-    "B0FYP69KJD", "success", "", "Engine Coolant Temperature Sensor", "4.5", "3498", ""
+    "B07XJ8C8F5", "success", "", "Engine Coolant Temperature Sensor", "4.5", "3498", ""
   ]);
 });
 
